@@ -1,2 +1,11 @@
-llm-final-design.md
 .DS_Store
+
+plan/
+
+datasets/
+
+data/
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
