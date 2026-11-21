@@ -64,6 +64,18 @@ class AnalysisPlan(_Strict):
         return self
 
 
+class ConversationState(_Strict):
+    """Previous-turn context that clients send back. Bounded and strictly typed because it is
+    placed in the planner's system prompt."""
+
+    metric: Metric | None = None
+    cities: Annotated[list[CityRef], Field(max_length=MAX_CITIES)] = []
+    state_filter: StateCode | None = None
+    start_month: Month | None = None
+    end_month: Month | None = None
+    operation: Operation | None = None
+
+
 class AnalyzeCall(_Strict):
     tool: Literal["analyze"]
     plan: AnalysisPlan
@@ -76,8 +88,11 @@ class SearchKnowledgeCall(_Strict):
 
 
 class RespondCall(_Strict):
+    """A reply without running a tool. There is deliberately no "answer" kind: anything that
+    states facts about the data must come from ``analyze`` or ``search_knowledge``."""
+
     tool: Literal["respond"]
-    kind: Literal["answer", "clarify", "unsupported", "out_of_scope"]
+    kind: Literal["clarify", "unsupported", "out_of_scope"]
     text: Annotated[str, Field(min_length=1, max_length=2000)]
 
 

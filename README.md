@@ -4,8 +4,8 @@ A small language model plans analyses of Zillow city-level home values (ZHVI) an
 trusted code validates each plan, compiles it to parameterized DuckDB SQL, and computes the
 results deterministically. The model never writes SQL and never supplies the numbers.
 
-> Status: week 1 — data pipeline and deterministic tool layer, with a stub model. The LLM endpoint,
-> agent loop, API, and UI come next.
+> Status: Step 2 in progress — agent loop, SageMaker client, and API work end to end with the
+> stub model. Next: evaluation set, endpoint deployment, baseline results. UI and RAG are Step 4.
 
 ## Quick start (no AWS needed)
 
@@ -23,6 +23,23 @@ uv run pytest
 uv run ruff check .
 ```
 
+## Run the API
+
+```bash
+# Offline, with the deterministic stub model (no AWS):
+MODEL_BACKEND=stub uv run uvicorn api.main:app --port 8000
+# Against a deployed SageMaker TGI endpoint:
+MODEL_BACKEND=sagemaker SAGEMAKER_ENDPOINT_NAME=<name> AWS_REGION=us-east-2 \
+    uv run uvicorn api.main:app --port 8000
+
+curl -s localhost:8000/health   # liveness: always 200 while the app is up
+curl -s localhost:8000/ready    # readiness: 503 when the model endpoint isn't InService
+curl -s localhost:8000/v1/ask -H 'content-type: application/json' \
+    -d '{"question": "Rank Colorado cities by ZHVI growth in 2025", "include_rows": false}'
+```
+
+Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an `X-API-Key` header.
+
 ## Layout
 
 | Path | Role |
@@ -35,7 +52,11 @@ uv run ruff check .
 | `tools/compiler.py` | `ValidatedPlan` → parameterized SQL |
 | `tools/operations.py` | Operation registry: series, change, yoy_change, extrema, rank, aggregate, coverage |
 | `agent/decoding.py` | Decoding profiles per agent step (greedy+constrained plans, nucleus answers) |
-| `agent/model_clients/` | Model-client interface and a deterministic stub |
+| `agent/model_clients/` | Model-client interface, deterministic stub, SageMaker TGI client |
+| `agent/prompts.py` | Planner and answer-writer prompts (catalog injected) |
+| `agent/orchestrator.py` | Bounded agent loop: plan → validate → execute → answer, with retries |
+| `agent/grounding.py` | Numeric-faithfulness check, template answers, clarification text |
+| `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
 
 ## Example
 

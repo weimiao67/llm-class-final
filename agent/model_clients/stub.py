@@ -9,11 +9,14 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
 from agent.decoding import DecodingProfile
 from agent.model_clients.base import ModelOutput
+
+STUB_CALL_LOG = 50
 
 FALLBACK = {
     "call": {
@@ -30,7 +33,8 @@ class StubModelClient:
 
     rules: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     model_id: str = "stub"
-    calls: list[dict[str, Any]] = field(default_factory=list)
+    # Bounded: the stub also backs long-running local API servers.
+    calls: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=STUB_CALL_LOG))
 
     def complete(
         self,
@@ -41,17 +45,46 @@ class StubModelClient:
         start = time.perf_counter()
         self.calls.append({"messages": messages, "profile": profile.name})
         if profile.constrained:
-            question = next(m["content"] for m in reversed(messages) if m["role"] == "user")
+            question = next(
+                m["content"]
+                for m in reversed(messages)
+                if m["role"] == "user" and not m["content"].startswith("TOOL RESULT:")
+            )
             payload = next(
                 (out for pattern, out in self.rules if re.search(pattern, question, re.I)),
                 FALLBACK,
             )
             text = json.dumps(payload)
         else:
-            text = f"Based on the tool results: {messages[-1]['content'][:300]}"
+            # No answer text: the agent falls back to its deterministic template answer.
+            text = ""
         return ModelOutput(
             text=text, model_id=self.model_id, latency_ms=(time.perf_counter() - start) * 1000
         )
+
+
+@dataclass
+class ScriptedModelClient:
+    """Returns ``outputs`` in order, one per call; for testing exact agent-loop behavior."""
+
+    outputs: list[str | dict[str, Any]]
+    model_id: str = "scripted"
+    calls: list[dict[str, Any]] = field(default_factory=list)
+
+    def complete(
+        self,
+        messages: list[dict[str, str]],
+        profile: DecodingProfile,
+        json_schema: dict[str, Any] | None = None,
+    ) -> ModelOutput:
+        self.calls.append(
+            {"messages": messages, "profile": profile.name, "schema": json_schema is not None}
+        )
+        if len(self.calls) > len(self.outputs):
+            raise AssertionError(f"unexpected model call #{len(self.calls)} ({profile.name})")
+        out = self.outputs[len(self.calls) - 1]
+        text = out if isinstance(out, str) else json.dumps(out)
+        return ModelOutput(text=text, model_id=self.model_id, latency_ms=1.0)
 
 
 def demo_rules() -> list[tuple[str, dict[str, Any]]]:
