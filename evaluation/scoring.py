@@ -217,6 +217,11 @@ def summarize(results: list[CaseResult]) -> dict[str, Any]:
         "execution_accuracy": _rate([r.exec_match for r in results]),
         "faithful_model_answer": _rate([r.faithful for r in results]),
         "turn_success": _rate([r.success for r in results]),
+        # A direct respond(clarify) also counts as success on clarification cases; this shows
+        # how often the model got there by calling analyze, as the gold call does.
+        "clarify_via_analyze": _rate(
+            [r.tool_correct for r in results if r.expected_response == "clarify"]
+        ),
         "latency_ms_p50": _pct(latencies, 50),
         "latency_ms_p95": _pct(latencies, 95),
         "mean_model_calls": round(statistics.fmean(r.model_calls for r in results), 2)

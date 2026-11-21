@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
+
+Step = Literal["plan", "answer"]
 
 
 @dataclass(frozen=True)
 class DecodingProfile:
     name: str
+    step: Step  # which agent step uses it; independent of whether output is constrained
     do_sample: bool
     temperature: float | None
     top_p: float | None
@@ -18,10 +21,17 @@ class DecodingProfile:
 
 
 PLAN = DecodingProfile(
-    "plan", do_sample=False, temperature=None, top_p=None, max_new_tokens=256, constrained=True
+    "plan",
+    "plan",
+    do_sample=False,
+    temperature=None,
+    top_p=None,
+    max_new_tokens=256,
+    constrained=True,
 )
 PLAN_RETRY = DecodingProfile(
     "plan_retry",
+    "plan",
     do_sample=False,
     temperature=None,
     top_p=None,
@@ -30,6 +40,7 @@ PLAN_RETRY = DecodingProfile(
 )
 ANSWER = DecodingProfile(
     "answer",
+    "answer",
     do_sample=True,
     temperature=0.3,
     top_p=0.9,
@@ -37,7 +48,7 @@ ANSWER = DecodingProfile(
     repetition_penalty=1.05,
 )
 ANSWER_GREEDY = DecodingProfile(
-    "answer_greedy", do_sample=False, temperature=None, top_p=None, max_new_tokens=200
+    "answer_greedy", "answer", do_sample=False, temperature=None, top_p=None, max_new_tokens=200
 )
 
 PROFILES = {p.name: p for p in (PLAN, PLAN_RETRY, ANSWER, ANSWER_GREEDY)}

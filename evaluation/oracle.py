@@ -31,5 +31,5 @@ class OracleModelClient:
     ) -> ModelOutput:
         # Planning steps get the gold call; answer steps get no text, so the agent uses its
         # deterministic template (the oracle is not a test of prose).
-        text = self._planner_text if profile.constrained else ""
+        text = self._planner_text if profile.step == "plan" else ""
         return ModelOutput(text=text, model_id=self.model_id, latency_ms=0.0)

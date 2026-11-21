@@ -9,7 +9,8 @@ so the question is whether the model picks the right tool and the right analysis
 | Path | Contents |
 |---|---|
 | `cases/v1.jsonl` | 200 hand-written cases, one JSON object per line |
-| `cases/v1_holdout_cities.json` | Cities named in v1 gold plans; Step 3 training data must not use them |
+| `cases/v1_holdout.json` | What Step 3 training data must not contain: eval plans (by meaning), cities, and questions |
+| `holdout.py` | Builds the hold-out file; `Holdout.conflicts(question, plan)` is the check Step 3 runs |
 | `cases.py` | Case schema (`EvalCase`) and loader |
 | `oracle.py` | Model client that always emits the gold call, used to check the set and the scorer |
 | `scoring.py` | Per-case scoring and aggregate metrics |
@@ -62,6 +63,13 @@ so the question is whether the model picks the right tool and the right analysis
 | **Execution accuracy** | The executed result rows equal the rows from gold or an alt (primary metric) |
 | Faithful model answer | The model's own prose passed the number check (a template fallback counts as a failure) |
 | Turn success | Correct response kind and, for data answers, correct rows |
+| Clarification via analyze | On clarification cases, the share where the model called `analyze` (the gold call) rather than asking on its own |
+
+Scoring rule for clarification cases: any turn that ends in `clarify` counts as a success, including
+a direct `respond(clarify)`, because the user still gets a question back. Only a clarification
+from `analyze` lists the real candidates ("Atlanta exists in 10 states: GA, ID, …"). A model that
+asks "which city?" whenever it is unsure therefore scores well on these cases, which is why the
+report shows "Clarification via analyze" next to them.
 
 Methodology cases count on tool selection until the knowledge base exists (Step 4).
 
@@ -73,5 +81,6 @@ uv run python scripts/run_eval.py --model stub     # offline baseline
 uv run python scripts/run_eval.py --model sagemaker --endpoint <name> --model-id <label>
 ```
 
-Use `--family extrema` or `--limit 20` for quick smoke runs. Changing a case changes the benchmark,
+Use `--family extrema` or `--limit 20` for quick smoke runs. A `--model-id` with a slash (Hugging
+Face ids) is made folder-safe in the run id; the report keeps the original id. Changing a case changes the benchmark,
 so add new cases in a new file (`v2.jsonl`) rather than editing `v1.jsonl`.

@@ -44,7 +44,7 @@ class StubModelClient:
     ) -> ModelOutput:
         start = time.perf_counter()
         self.calls.append({"messages": messages, "profile": profile.name})
-        if profile.constrained:
+        if profile.step == "plan":
             user_messages = [m["content"] for m in messages if m["role"] == "user"]
             # Skip tool-result messages, but a user may type that prefix themselves.
             question = next(

@@ -14,6 +14,7 @@ Reports go to evaluation/reports/<run-id>/ (report.md, summary.json, results.jso
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -25,6 +26,11 @@ from evaluation.runner import run_eval, write_report
 from housing.db import HousingDB
 
 DEFAULT_CASES = Path("evaluation/cases/v1.jsonl")
+
+
+def safe_name(text: str) -> str:
+    """Folder-safe run label: Hugging Face ids like "meta-llama/Llama-3.2-3B" contain slashes."""
+    return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "model"
 
 
 def main() -> int:
@@ -65,7 +71,7 @@ def main() -> int:
         print(f"[{i:3d}/{n}] {mark} {r.id:<16} {r.latency_ms:8.0f} ms  {r.question[:60]}")
 
     results = run_eval(cases, db, factory, progress=progress)
-    run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{model_id}"
+    run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{safe_name(model_id)}"
     report = write_report(
         args.out_dir / run_id,
         results,

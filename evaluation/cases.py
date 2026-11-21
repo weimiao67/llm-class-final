@@ -79,14 +79,3 @@ def load_cases(path: Path | str) -> list[EvalCase]:
     if dupes:
         raise ValueError(f"duplicate case ids: {sorted(dupes)}")
     return cases
-
-
-def holdout_cities(cases: list[EvalCase]) -> list[dict[str, str | None]]:
-    """Cities named in eval gold plans. Step 3 training data must not use them."""
-    seen: dict[tuple, dict[str, str | None]] = {}
-    for case in cases:
-        for plan in case.acceptable_plans():
-            for city in plan.get("cities", []):
-                key = (city["city"].lower(), city.get("state"))
-                seen.setdefault(key, {"city": city["city"], "state": city.get("state")})
-    return sorted(seen.values(), key=lambda c: (c["state"] or "", c["city"]))

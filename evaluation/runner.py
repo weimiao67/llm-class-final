@@ -27,7 +27,7 @@ class RecordingClient:
     def __init__(self, inner: ModelClient):
         self.inner = inner
         self.model_id = inner.model_id
-        self.calls: list[tuple[str, bool, str]] = []  # (profile, constrained, text)
+        self.calls: list[tuple[str, str, str]] = []  # (profile name, step, text)
 
     def complete(
         self,
@@ -36,12 +36,12 @@ class RecordingClient:
         json_schema: dict[str, Any] | None = None,
     ) -> ModelOutput:
         out = self.inner.complete(messages, profile, json_schema)
-        self.calls.append((profile.name, profile.constrained, out.text))
+        self.calls.append((profile.name, profile.step, out.text))
         return out
 
     @property
     def planner_outputs(self) -> list[str]:
-        return [text for _, constrained, text in self.calls if constrained]
+        return [text for _, step, text in self.calls if step == "plan"]
 
 
 def run_eval(
@@ -103,6 +103,7 @@ def render_markdown(meta: dict[str, Any], summary: dict[str, Any], results: list
         f"| **Execution accuracy** | **{_fmt(o['execution_accuracy'])}** |",
         f"| Faithful model answer | {_fmt(o['faithful_model_answer'])} |",
         f"| Turn success | {_fmt(o['turn_success'])} |",
+        f"| Clarification cases reached via analyze | {_fmt(o['clarify_via_analyze'])} |",
         f"| Latency p50 / p95 (ms) | {o['latency_ms_p50']} / {o['latency_ms_p95']} |",
         f"| Mean model calls per turn | {o['mean_model_calls']} |",
         "",
