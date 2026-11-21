@@ -1,0 +1,334 @@
+{
+  "cases_file": "evaluation/cases/v1.jsonl",
+  "note": "Cities named in eval gold plans. Step 3 training data must not use them.",
+  "cities": [
+    {
+      "city": "Albuquerque",
+      "state": null
+    },
+    {
+      "city": "Atlanta",
+      "state": null
+    },
+    {
+      "city": "Austin",
+      "state": null
+    },
+    {
+      "city": "Bellevue",
+      "state": null
+    },
+    {
+      "city": "Boise",
+      "state": null
+    },
+    {
+      "city": "Chicago",
+      "state": null
+    },
+    {
+      "city": "Dallas",
+      "state": null
+    },
+    {
+      "city": "Denver",
+      "state": null
+    },
+    {
+      "city": "Detroit",
+      "state": null
+    },
+    {
+      "city": "Gotham City",
+      "state": null
+    },
+    {
+      "city": "Honolulu",
+      "state": null
+    },
+    {
+      "city": "Houston",
+      "state": null
+    },
+    {
+      "city": "Los Angeles",
+      "state": null
+    },
+    {
+      "city": "Louisville",
+      "state": null
+    },
+    {
+      "city": "Nashville",
+      "state": null
+    },
+    {
+      "city": "New York",
+      "state": null
+    },
+    {
+      "city": "Oklahoma City",
+      "state": null
+    },
+    {
+      "city": "Salt Lake City",
+      "state": null
+    },
+    {
+      "city": "San Francisco",
+      "state": null
+    },
+    {
+      "city": "Seattle",
+      "state": null
+    },
+    {
+      "city": "Springfield",
+      "state": null
+    },
+    {
+      "city": "Tacoma",
+      "state": null
+    },
+    {
+      "city": "Tucson",
+      "state": null
+    },
+    {
+      "city": "Salem",
+      "state": "AR"
+    },
+    {
+      "city": "Mesa",
+      "state": "AZ"
+    },
+    {
+      "city": "Phoenix",
+      "state": "AZ"
+    },
+    {
+      "city": "Scottsdale",
+      "state": "AZ"
+    },
+    {
+      "city": "Tempe",
+      "state": "AZ"
+    },
+    {
+      "city": "Tucson",
+      "state": "AZ"
+    },
+    {
+      "city": "Riverside",
+      "state": "CA"
+    },
+    {
+      "city": "Sacramento",
+      "state": "CA"
+    },
+    {
+      "city": "San Francisco",
+      "state": "CA"
+    },
+    {
+      "city": "San Jose",
+      "state": "CA"
+    },
+    {
+      "city": "Aurora",
+      "state": "CO"
+    },
+    {
+      "city": "Boulder",
+      "state": "CO"
+    },
+    {
+      "city": "Colorado Springs",
+      "state": "CO"
+    },
+    {
+      "city": "Denver",
+      "state": "CO"
+    },
+    {
+      "city": "Denvr",
+      "state": "CO"
+    },
+    {
+      "city": "Fort Collins",
+      "state": "CO"
+    },
+    {
+      "city": "Mead",
+      "state": "CO"
+    },
+    {
+      "city": "Telluride",
+      "state": "CO"
+    },
+    {
+      "city": "Atlantis",
+      "state": "FL"
+    },
+    {
+      "city": "Cape Coral",
+      "state": "FL"
+    },
+    {
+      "city": "Miami",
+      "state": "FL"
+    },
+    {
+      "city": "Orlando",
+      "state": "FL"
+    },
+    {
+      "city": "Tampa",
+      "state": "FL"
+    },
+    {
+      "city": "Atlanta",
+      "state": "GA"
+    },
+    {
+      "city": "Waimea",
+      "state": "HI"
+    },
+    {
+      "city": "Boise",
+      "state": "ID"
+    },
+    {
+      "city": "Chicago",
+      "state": "IL"
+    },
+    {
+      "city": "Smallville",
+      "state": "KS"
+    },
+    {
+      "city": "Boston",
+      "state": "MA"
+    },
+    {
+      "city": "Cambridge",
+      "state": "MA"
+    },
+    {
+      "city": "Baltimore",
+      "state": "MD"
+    },
+    {
+      "city": "Detroit",
+      "state": "MI"
+    },
+    {
+      "city": "Minneapolis",
+      "state": "MN"
+    },
+    {
+      "city": "Kansas City",
+      "state": "MO"
+    },
+    {
+      "city": "Charlotte",
+      "state": "NC"
+    },
+    {
+      "city": "Durham",
+      "state": "NC"
+    },
+    {
+      "city": "Fairview",
+      "state": "NC"
+    },
+    {
+      "city": "Raleigh",
+      "state": "NC"
+    },
+    {
+      "city": "Las Vegas",
+      "state": "NV"
+    },
+    {
+      "city": "New York",
+      "state": "NY"
+    },
+    {
+      "city": "Cleveland",
+      "state": "OH"
+    },
+    {
+      "city": "Columbus",
+      "state": "OH"
+    },
+    {
+      "city": "Oakwood",
+      "state": "OH"
+    },
+    {
+      "city": "Shiloh",
+      "state": "OH"
+    },
+    {
+      "city": "Sugarcreek",
+      "state": "OH"
+    },
+    {
+      "city": "Portland",
+      "state": "OR"
+    },
+    {
+      "city": "Pittsburgh",
+      "state": "PA"
+    },
+    {
+      "city": "Nashville",
+      "state": "TN"
+    },
+    {
+      "city": "Austin",
+      "state": "TX"
+    },
+    {
+      "city": "Dallas",
+      "state": "TX"
+    },
+    {
+      "city": "Houston",
+      "state": "TX"
+    },
+    {
+      "city": "Lakeside",
+      "state": "TX"
+    },
+    {
+      "city": "Pinehurst",
+      "state": "TX"
+    },
+    {
+      "city": "San Antonio",
+      "state": "TX"
+    },
+    {
+      "city": "Seattle",
+      "state": "WA"
+    },
+    {
+      "city": "Spokane",
+      "state": "WA"
+    },
+    {
+      "city": "Bristol",
+      "state": "WI"
+    },
+    {
+      "city": "Madison",
+      "state": "WI"
+    },
+    {
+      "city": "Plymouth",
+      "state": "WI"
+    }
+  ]
+}

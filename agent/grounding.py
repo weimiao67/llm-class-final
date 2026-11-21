@@ -130,15 +130,30 @@ def template_answer(art: QueryArtifact) -> str:
     return f"{metric} — " + "; ".join(parts) + "."
 
 
+MAX_LISTED_STATES = 12
+
+
 def clarification_text(err: ToolError) -> str:
     if err.kind == "ambiguous_city":
         lines = []
         for item in err.details["cities"]:
-            options = ", ".join(
-                f"{c['city']}, {c['state']} ({c['county']})" for c in item["candidates"]
-            )
-            lines.append(f'Several places match "{item["query"]["city"]}": {options}.')
-        return " ".join(lines) + " Which one do you mean?"
+            name, candidates = item["query"]["city"], item["candidates"]
+            states = sorted({c["state"] for c in candidates})
+            if len(states) > 1:
+                # Different states: ask for the state (listing every county would be noise).
+                shown = ", ".join(states[:MAX_LISTED_STATES])
+                more = len(states) - MAX_LISTED_STATES
+                lines.append(
+                    f'"{name}" exists in {len(states)} states ({shown}'
+                    + (f", and {more} more" if more > 0 else "")
+                    + "). Which state do you mean?"
+                )
+            else:
+                options = ", ".join(
+                    f"{c['city']}, {c['state']} ({c['county']})" for c in candidates
+                )
+                lines.append(f'Several places match "{name}": {options}. Which one do you mean?')
+        return " ".join(lines)
     if err.kind == "city_not_found":
         lines = []
         for item in err.details["cities"]:

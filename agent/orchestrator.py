@@ -71,6 +71,7 @@ class AgentResponse(BaseModel):
     answer: str
     answer_source: AnswerSource
     artifact: QueryArtifact | None = None
+    plan: dict[str, Any] | None = None  # last AnalysisPlan the planner proposed this turn
     sources: list[Passage] = []
     trace: list[TraceEvent] = []
     updated_state: dict[str, Any] = {}
@@ -92,6 +93,7 @@ class _Turn:
         self.trace: list[TraceEvent] = []
         self.model_ms = 0.0
         self.tool_ms = 0.0
+        self.plan: dict[str, Any] | None = None
         self.started = time.perf_counter()
         self.deadline = self.started + timeout_s
 
@@ -192,6 +194,7 @@ class Agent:
             if not isinstance(call, AnalyzeCall):  # unreachable unless ToolCall gains a tool
                 raise TypeError(f"unhandled tool call {type(call).__name__}")
             t0 = time.perf_counter()
+            turn.plan = call.plan.model_dump()
             result = self.validator.validate(call.plan)
             vplan = result if isinstance(result, ValidatedPlan) else None
             if vplan is not None:
@@ -345,6 +348,7 @@ class Agent:
             answer=answer,
             answer_source=source,
             artifact=artifact,
+            plan=turn.plan,
             sources=sources or [],
             trace=turn.trace,
             updated_state=state or {},
