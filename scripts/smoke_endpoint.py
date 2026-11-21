@@ -3,9 +3,12 @@
 Checks, using the real planner prompt:
   1. constrained greedy planning: TGI accepts `response_format` with the ToolCall JSON Schema,
      and the reply parses as a valid tool call
-  2. greedy is deterministic: the same request twice gives the same text
-  3. unconstrained planning still answers (needed for the "no constraint" ablation rows)
-  4. sampled answer writing (temperature 0.3, top_p 0.9) returns text
+  2. the constraint is really enforced (negative control): asked to reply "hello", the model
+     still returns a valid tool call when the schema is sent, and plain text when it isn't.
+     Check 1 alone can't show this, because the planner prompt already asks for JSON.
+  3. greedy is deterministic: the same request twice gives the same text
+  4. unconstrained planning still answers (needed for the "no constraint" ablation rows)
+  5. sampled answer writing (temperature 0.3, top_p 0.9) returns text
 
 Usage (Studio terminal, repo root, endpoint InService):
     uv run python scripts/smoke_endpoint.py --endpoint final-wm-llama32-3b-base
@@ -28,6 +31,10 @@ from housing.db import HousingDB
 from tools.schemas import ToolCall, tool_call_json_schema
 
 QUESTION = "Rank Colorado cities by ZHVI growth in 2025."
+CONTROL = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Reply with only the word hello. Do not output JSON."},
+]
 
 
 def check(label: str, fn) -> bool:
@@ -47,7 +54,16 @@ def main() -> int:
     args = parser.parse_args()
 
     client = SageMakerModelClient(args.endpoint, region=args.region)
-    print("endpoint:", client.health())
+    try:
+        health = client.health()
+    except Exception as exc:
+        print(f"Endpoint {args.endpoint!r} not reachable ({type(exc).__name__}: {exc}).")
+        print("Check it with: python scripts/deploy_endpoint.py --status --name <name>")
+        return 2
+    if health["status"] != "InService":
+        print(f"Endpoint {args.endpoint!r} is {health['status']}, not InService; try again later.")
+        return 2
+    print("endpoint:", health)
     messages = planner_messages(HousingDB(args.data_dir), QUESTION, [], None)
     schema = tool_call_json_schema()
 
@@ -61,6 +77,20 @@ def main() -> int:
         out = client.complete(messages, decoding.PLAN, schema)
         outputs.append(out.text)
         return True, f"{out.latency_ms:.0f} ms, {out.usage} → {parse(out.text)}"
+
+    def enforced():
+        with_schema = client.complete(CONTROL, decoding.PLAN, schema).text
+        try:
+            parsed = parse(with_schema)
+        except ValidationError:
+            return False, f"constraint NOT applied: schema sent, model replied {with_schema!r}"
+        without = client.complete(CONTROL, decoding.PLAN, None).text
+        try:
+            parse(without)
+            control = "inconclusive: the model returned a tool call even without the schema"
+        except ValidationError:
+            control = f"without schema it replied {without[:60]!r}"
+        return True, f"schema forced a tool call ({parsed[:80]}); {control}"
 
     def deterministic():
         again = client.complete(messages, decoding.PLAN, schema).text
@@ -82,6 +112,7 @@ def main() -> int:
         return bool(out.text.strip()), f"{out.latency_ms:.0f} ms → {out.text[:200]!r}"
 
     results = [check("constrained greedy plan parses as a tool call", constrained)]
+    results.append(check("schema constraint is enforced (negative control)", enforced))
     if results[0]:
         results.append(check("greedy decoding is deterministic", deterministic))
     results.append(check("unconstrained plan request succeeds", unconstrained))

@@ -77,10 +77,21 @@ run `DescribeModel` can see it. Use a read-only token, and revoke it after the p
 uv run python scripts/smoke_endpoint.py --endpoint final-wm-llama32-3b-base
 ```
 
-It checks that TGI accepts the JSON-schema constraint (`response_format`), that greedy decoding
-is deterministic, and that sampled answers work. **If check 1 fails, stop here** (go to step 7)
-and share the output: it usually means TGI rejected part of the schema, and the fix belongs in the
-code, not the endpoint.
+It runs five checks:
+
+- TGI accepts the JSON-schema constraint (`response_format`).
+- The constraint is actually enforced. This is a negative control: asked to reply "hello", the
+  model must still return a tool call when the schema is sent.
+- Greedy decoding is deterministic.
+- Requests without the constraint still work.
+- Sampled answers return text.
+
+**If either of the first two checks fails, stop here** (go to step 7) and share the output. It
+usually means TGI rejected or ignored part of the schema, and the fix belongs in the code, not the
+endpoint.
+
+If a deploy fails or times out, `deploy_endpoint.py` prints what already exists and the exact
+`--delete --name …` command. It also refuses to deploy over leftover resources with the same name.
 
 ## 5. Run the evaluation
 

@@ -52,3 +52,98 @@ def test_hub_specs_have_no_model_data():
     env = deploy.container_env("m", None, "t")
     specs = deploy.endpoint_specs("n", "img", "r", "ml.g5.2xlarge", env, None)
     assert "ModelDataUrl" not in specs["model"]["PrimaryContainer"]
+
+
+# ---- deploy() failure handling, against a stubbed SageMaker client ---------------------------
+
+ARN = "arn:aws:sagemaker:us-east-2:123456789012"
+ROLE = "arn:aws:iam::123456789012:role/r"
+NAME = "final-wm-x"
+
+
+@pytest.fixture
+def sm(monkeypatch):
+    import boto3
+    from botocore.stub import Stubber
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+    client = boto3.client("sagemaker", region_name="us-east-2")
+    with Stubber(client) as stub:
+        yield client, stub
+        stub.assert_no_pending_responses()
+
+
+def _specs():
+    env = deploy.container_env("m", None, "t")
+    return deploy.endpoint_specs(NAME, "img", ROLE, "ml.g5.2xlarge", env, None)
+
+
+def _missing(stub, *operations):
+    for op in operations:
+        stub.add_client_error(op, "ValidationException", f"Could not find {op}")
+
+
+def _nothing_exists(stub):
+    _missing(stub, "describe_model", "describe_endpoint_config", "describe_endpoint")
+
+
+def _creates_succeed(stub):
+    stub.add_response("create_model", {"ModelArn": f"{ARN}:model/{NAME}"})
+    stub.add_response(
+        "create_endpoint_config", {"EndpointConfigArn": f"{ARN}:endpoint-config/{NAME}"}
+    )
+    stub.add_response("create_endpoint", {"EndpointArn": f"{ARN}:endpoint/{NAME}"})
+
+
+def test_refuses_to_deploy_over_leftovers(sm, capsys):
+    client, stub = sm
+    model = {
+        "ModelName": NAME,
+        "ModelArn": f"{ARN}:model/{NAME}",
+        "CreationTime": "2026-11-20",
+        "ExecutionRoleArn": ROLE,
+    }
+    stub.add_response("describe_model", model)
+    _missing(stub, "describe_endpoint_config", "describe_endpoint")
+    assert deploy.deploy(client, _specs(), wait=False) == 1
+    out = capsys.readouterr().out
+    assert f"model named '{NAME}' already exist" in out and f"--delete --name {NAME}" in out
+
+
+def test_partial_create_failure_names_what_to_clean_up(sm, capsys):
+    client, stub = sm
+    _nothing_exists(stub)
+    stub.add_response("create_model", {"ModelArn": f"{ARN}:model/{NAME}"})
+    stub.add_client_error("create_endpoint_config", "ResourceLimitExceeded", "quota exceeded")
+    assert deploy.deploy(client, _specs(), wait=False) == 1
+    out = capsys.readouterr().out
+    assert "quota exceeded" in out and "Already created: model" in out and "--delete" in out
+
+
+def test_successful_no_wait_deploy(sm, capsys):
+    client, stub = sm
+    _nothing_exists(stub)
+    _creates_succeed(stub)
+    assert deploy.deploy(client, _specs(), wait=False) == 0
+    assert "billing starts now" in capsys.readouterr().out
+
+
+def test_failed_endpoint_reports_status_and_delete_hint(sm, capsys):
+    client, stub = sm
+    _nothing_exists(stub)
+    _creates_succeed(stub)
+    failed = {
+        "EndpointName": NAME,
+        "EndpointArn": f"{ARN}:endpoint/{NAME}",
+        "EndpointStatus": "Failed",
+        "FailureReason": "CUDA out of memory",
+        "CreationTime": "2026-11-20",
+        "LastModifiedTime": "2026-11-20",
+    }
+    stub.add_response("describe_endpoint", failed)  # the waiter sees Failed and stops
+    stub.add_response("describe_endpoint", failed)  # status() after the failure
+    assert deploy.deploy(client, _specs(), wait=True) == 1
+    out = capsys.readouterr().out
+    assert "did not reach InService" in out and "CUDA out of memory" in out
+    assert "may still be billing" in out and f"--delete --name {NAME}" in out

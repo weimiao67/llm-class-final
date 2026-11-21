@@ -118,17 +118,71 @@ def execution_role() -> str:
 # ---- actions ---------------------------------------------------------------------------------
 
 
-def deploy(sm, specs: dict[str, dict[str, Any]], wait: bool) -> None:
+def delete_hint(name: str) -> str:
+    return f"python scripts/deploy_endpoint.py --delete --name {name}"
+
+
+def existing_resources(sm, name: str) -> list[str]:
+    """Which of model / endpoint config / endpoint already exist under ``name``."""
+    found = []
+    checks = (
+        ("model", sm.describe_model, {"ModelName": name}),
+        ("endpoint config", sm.describe_endpoint_config, {"EndpointConfigName": name}),
+        ("endpoint", sm.describe_endpoint, {"EndpointName": name}),
+    )
+    for label, call, kwargs in checks:
+        try:
+            call(**kwargs)
+            found.append(label)
+        except sm.exceptions.ClientError as error:
+            if error.response["Error"]["Code"] != "ValidationException":  # not "does not exist"
+                raise
+    return found
+
+
+def deploy(sm, specs: dict[str, dict[str, Any]], wait: bool) -> int:
+    """Create model, endpoint config, and endpoint. Returns a process exit code."""
+    from botocore.exceptions import WaiterError
+
     name = specs["endpoint"]["EndpointName"]
-    sm.create_model(**specs["model"])
-    sm.create_endpoint_config(**specs["config"])
-    sm.create_endpoint(**specs["endpoint"])
-    print(f"Creating endpoint {name} — billing starts now (~10 min until InService).")
-    if wait:
+    leftovers = existing_resources(sm, name)
+    if leftovers:
+        print(f"Not deploying: {', '.join(leftovers)} named {name!r} already exist.")
+        if "endpoint" in leftovers:
+            status(sm, name)
+        print(f"Delete them first (stops any billing): {delete_hint(name)}")
+        return 1
+
+    created = []
+    try:
+        for label, call, spec in (
+            ("model", sm.create_model, specs["model"]),
+            ("endpoint config", sm.create_endpoint_config, specs["config"]),
+            ("endpoint", sm.create_endpoint, specs["endpoint"]),
+        ):
+            call(**spec)
+            created.append(label)
+    except sm.exceptions.ClientError as error:
+        print(f"Deploy failed: {error.response['Error']['Message']}")
+        if created:
+            print(f"Already created: {', '.join(created)}. Clean up with: {delete_hint(name)}")
+        return 1
+
+    print(f"Creating endpoint {name}; billing starts now (~10 min until InService).")
+    if not wait:
+        print(f"Check with --status; delete when done: {delete_hint(name)}")
+        return 0
+    try:
         sm.get_waiter("endpoint_in_service").wait(
             EndpointName=name, WaiterConfig={"Delay": 30, "MaxAttempts": 60}
         )
-        print(f"{name} is InService. Delete it when done: python {sys.argv[0]} --delete")
+    except WaiterError as error:
+        print(f"Endpoint did not reach InService: {error}")
+        status(sm, name)
+        print(f"It may still be billing. Delete it with: {delete_hint(name)}")
+        return 1
+    print(f"{name} is InService. Delete it when done: {delete_hint(name)}")
+    return 0
 
 
 def status(sm, name: str) -> None:
@@ -190,8 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     specs = endpoint_specs(
         args.name, image, args.role or execution_role(), args.instance_type, env, args.model_data
     )
-    deploy(sm, specs, wait=not args.no_wait)
-    return 0
+    return deploy(sm, specs, wait=not args.no_wait)
 
 
 if __name__ == "__main__":
