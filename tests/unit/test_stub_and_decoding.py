@@ -42,3 +42,20 @@ def test_stub_forecast_rule_wins_over_city_rules():
     out = stub.complete([{"role": "user", "content": "Will Oakwood's value rise next year?"}], PLAN)
     call = ToolCall.model_validate_json(out.text).call
     assert call.tool == "respond" and call.kind == "out_of_scope"
+
+
+def test_stub_call_log_is_bounded():
+    from agent.model_clients.stub import STUB_CALL_LOG
+
+    stub = StubModelClient(rules=demo_rules())
+    for _ in range(STUB_CALL_LOG + 10):
+        stub.complete([{"role": "user", "content": "x"}], PLAN)
+    assert len(stub.calls) == STUB_CALL_LOG
+
+
+def test_respond_schema_has_no_direct_answer_kind():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        ToolCall.model_validate({"call": {"tool": "respond", "kind": "answer", "text": "hi"}})

@@ -21,7 +21,9 @@ Tools:
    {{"call": {{"tool": "search_knowledge", "query": "...", "top_k": 3}}}}
 3. respond — reply without running a tool.
    {{"call": {{"tool": "respond", "kind": KIND, "text": "..."}}}}
-   KIND is one of: clarify, unsupported, out_of_scope, answer
+   KIND is one of: clarify, unsupported, out_of_scope. There is no direct answer: any statement
+   about the data must come from analyze or search_knowledge. Use clarify for greetings or
+   unclear questions.
 
 AnalysisPlan fields:
 - metric: "zhvi" (home values) or "zori" (rents)

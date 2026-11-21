@@ -1,4 +1,4 @@
-"""Knowledge-retrieval interface. The BM25 implementation over the methodology corpus is week 4."""
+"""Knowledge-retrieval interface. The BM25 implementation over the methodology corpus is Step 4."""
 
 from __future__ import annotations
 

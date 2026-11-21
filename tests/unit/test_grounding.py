@@ -74,3 +74,8 @@ def test_not_found_text_offers_suggestions():
         details={"cities": [{"query": {"city": "Denvr"}, "suggestions": ["Denver, CO"]}]},
     )
     assert "Did you mean Denver, CO?" in clarification_text(err)
+
+
+def test_iso_months_in_prose_count_as_years():
+    assert unsupported_numbers("In 2025-12 the value was $535,000.", EVIDENCE) == []
+    assert unsupported_numbers("On 2025-12-01 it was $535,000.", EVIDENCE) == []

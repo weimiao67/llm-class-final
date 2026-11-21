@@ -9,11 +9,14 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
 from agent.decoding import DecodingProfile
 from agent.model_clients.base import ModelOutput
+
+STUB_CALL_LOG = 50
 
 FALLBACK = {
     "call": {
@@ -30,7 +33,8 @@ class StubModelClient:
 
     rules: list[tuple[str, dict[str, Any]]] = field(default_factory=list)
     model_id: str = "stub"
-    calls: list[dict[str, Any]] = field(default_factory=list)
+    # Bounded: the stub also backs long-running local API servers.
+    calls: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=STUB_CALL_LOG))
 
     def complete(
         self,

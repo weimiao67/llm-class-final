@@ -17,6 +17,8 @@ from typing import Any
 from tools.schemas import QueryArtifact, ToolError
 
 # 1,234,567.89 | 1234.5 | -2.1 | 535 ; optional currency symbol is ignored by the pattern
+# ISO months/dates written in prose ("2025-12", "2025-12-01") count as the year only.
+_ISO_DATE = re.compile(r"\b((?:19|20)\d{2})-(?:0[1-9]|1[0-2])(?:-\d{2})?\b")
 _NUMBER = re.compile(r"(?<![\w.])-?\d{1,3}(?:,\d{3})+(?:\.\d+)?|(?<![\w.])-?\d+(?:\.\d+)?")
 
 
@@ -55,7 +57,7 @@ def unsupported_numbers(answer: str, evidence: Any, question: str = "") -> list[
     _walk(evidence, values, years)
     question_values = {v for v, _ in numbers_in_text(question)}
     bad = []
-    for value, decimals in numbers_in_text(answer):
+    for value, decimals in numbers_in_text(_ISO_DATE.sub(r"\1", answer)):
         if value in question_values or (decimals == 0 and int(value) in years):
             continue
         if any(round(abs(v), decimals) == abs(value) for v in values):

@@ -1,5 +1,7 @@
 """Agent-loop behavior with a scripted model, on the fixture dataset (see tests/conftest.py)."""
 
+import time
+
 import pytest
 
 from agent.model_clients.stub import ScriptedModelClient
@@ -101,9 +103,25 @@ def test_out_of_scope_reply_passes_through(db):
 
 
 def test_direct_reply_with_invented_numbers_is_replaced(db):
-    agent, _ = make(db, [respond("answer", "Denver rent is $2,345.")])
+    agent, _ = make(db, [respond("unsupported", "Denver rent is $2,345, but I can't say more.")])
     r = agent.run_turn("Denver rent?")
     assert r.answer_source == "system" and "$2,345" not in r.answer
+
+
+def test_direct_answer_from_memory_is_rejected_and_retried(db):
+    memory = respond("answer", "Denver home values rose sharply this year and outpaced Boulder.")
+    agent, model = make(db, [memory, DENVER_2025, GOOD_ANSWER])
+    r = agent.run_turn("How did Denver compare to Boulder?")
+    assert (r.kind, r.answer_source) == ("answer", "model") and r.artifact is not None
+    assert model.calls[1]["profile"] == "plan_retry"
+    assert "kind" in model.calls[1]["messages"][-1]["content"]  # schema error names the field
+
+
+def test_repeated_answers_from_memory_never_reach_the_user(db):
+    memory = respond("answer", "Denver home values rose sharply this year.")
+    agent, _ = make(db, [memory] * (MAX_PLAN_RETRIES + 1))
+    r = agent.run_turn("How did Denver do?")
+    assert r.kind == "error" and "rose sharply" not in r.answer
 
 
 def test_ungrounded_answer_is_regenerated_greedily(db):
@@ -182,3 +200,17 @@ def test_trace_records_why_the_template_was_used(db):
         ("retry", "answer_greedy: ungrounded numbers: 777777"),
         ("ok", "template fallback"),
     ]
+
+
+def test_turn_timeout_stops_before_the_next_model_call(db):
+    class Slow(ScriptedModelClient):
+        def complete(self, messages, profile, json_schema=None):
+            out = super().complete(messages, profile, json_schema)
+            time.sleep(0.05)
+            return out
+
+    model = Slow([DENVER_2025, GOOD_ANSWER])
+    r = Agent(db, model, turn_timeout_s=0.01).run_turn("Denver 2025?")
+    assert r.kind == "error" and "too long" in r.answer
+    assert len(model.calls) == 1  # the answer-writer call was never made
+    assert r.trace[-1].detail == "turn timeout"

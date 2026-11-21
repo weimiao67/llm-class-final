@@ -27,6 +27,7 @@ from tools.knowledge import KnowledgeBase, Passage
 from tools.operations import execute
 from tools.schemas import (
     AnalyzeCall,
+    ConversationState,
     QueryArtifact,
     RespondCall,
     SearchKnowledgeCall,
@@ -38,16 +39,17 @@ from tools.validator import PlanValidator, ValidatedPlan, field_errors
 
 log = logging.getLogger(__name__)
 
-MAX_PLANNER_CALLS = 4
 MAX_PLAN_RETRIES = 2
+MAX_PLANNER_CALLS = MAX_PLAN_RETRIES + 1  # every planner call either finishes the turn or retries
 MAX_HISTORY_MESSAGES = 6
+# Checked before each model call. A single call is bounded separately by the client timeout, so a
+# turn can overrun this by at most one call.
+TURN_TIMEOUT_S = 60.0
 
 ResponseKind = Literal["answer", "clarify", "unsupported", "out_of_scope", "no_data", "error"]
 AnswerSource = Literal["model", "model_regenerated", "template", "system"]
 
 SAFE_RESPOND_TEXT = {
-    "answer": "I can only report numbers that come from the database. Please ask about a city, "
-    "metric, and period.",
     "clarify": "Could you clarify which city, metric, or period you mean?",
     "unsupported": "The database can't answer that question with its available fields and "
     "operations.",
@@ -79,14 +81,23 @@ class AgentResponse(BaseModel):
     latency_ms: dict[str, float] = {}
 
 
+class TurnTimeout(Exception):
+    """The turn's time budget ran out before the next model call."""
+
+
 class _Turn:
     """Mutable bookkeeping for one turn."""
 
-    def __init__(self) -> None:
+    def __init__(self, timeout_s: float) -> None:
         self.trace: list[TraceEvent] = []
         self.model_ms = 0.0
         self.tool_ms = 0.0
         self.started = time.perf_counter()
+        self.deadline = self.started + timeout_s
+
+    def check_deadline(self) -> None:
+        if time.perf_counter() >= self.deadline:
+            raise TurnTimeout
 
     def event(self, step: int, tool: str, status: str, ms: float, detail: str | None = None):
         self.trace.append(
@@ -109,7 +120,9 @@ class Agent:
         model: ModelClient,
         knowledge: KnowledgeBase | None = None,
         validator: PlanValidator | None = None,
+        turn_timeout_s: float = TURN_TIMEOUT_S,
     ):
+        self.turn_timeout_s = turn_timeout_s
         self.db = db
         self.model = model
         self.knowledge = knowledge
@@ -124,9 +137,19 @@ class Agent:
         history: list[dict[str, str]] | None = None,
         state: dict[str, Any] | None = None,
     ) -> AgentResponse:
-        turn = _Turn()
+        turn = _Turn(self.turn_timeout_s)
         try:
             return self._run(question, (history or [])[-MAX_HISTORY_MESSAGES:], state or {}, turn)
+        except TurnTimeout:
+            log.warning("agent turn exceeded %.0f s", self.turn_timeout_s)
+            turn.event(len(turn.trace) + 1, "agent", "error", 0, "turn timeout")
+            return self._response(
+                turn,
+                "error",
+                "That took too long to answer. Please try again in a moment.",
+                "system",
+                state=state or {},
+            )
         except Exception:  # model/endpoint/infrastructure failure: safe message, details in logs
             log.exception("agent turn failed")
             turn.event(len(turn.trace) + 1, "agent", "error", 0, "internal error")
@@ -204,6 +227,7 @@ class Agent:
     # ---- steps ---------------------------------------------------------------------------------
 
     def _complete(self, turn: _Turn, messages, profile, schema=None) -> ModelOutput:
+        turn.check_deadline()
         out = self.model.complete(messages, profile, schema if profile.constrained else None)
         turn.model_ms += out.latency_ms
         return out
@@ -334,11 +358,12 @@ class Agent:
 def _state_from(vplan: ValidatedPlan) -> dict[str, Any]:
     """Conversation context for follow-ups, built from what was actually resolved and run."""
     plan = vplan.plan
-    return {
-        "metric": plan.metric,
-        "cities": [{"city": r.city, "state": r.state, "county": r.county} for r in vplan.regions],
-        "state_filter": plan.state_filter,
-        "start_month": f"{vplan.start:%Y-%m}",
-        "end_month": f"{vplan.end:%Y-%m}",
-        "operation": plan.operation,
-    }
+    state = ConversationState(
+        metric=plan.metric,
+        cities=[{"city": r.city, "state": r.state, "county": r.county} for r in vplan.regions],
+        state_filter=plan.state_filter,
+        start_month=f"{vplan.start:%Y-%m}",
+        end_month=f"{vplan.end:%Y-%m}",
+        operation=plan.operation,
+    )
+    return state.model_dump()  # same shape clients must send back (validated by the API)

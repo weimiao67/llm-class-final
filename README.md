@@ -4,8 +4,8 @@ A small language model plans analyses of Zillow city-level home values (ZHVI) an
 trusted code validates each plan, compiles it to parameterized DuckDB SQL, and computes the
 results deterministically. The model never writes SQL and never supplies the numbers.
 
-> Status: week 2 in progress — agent loop, SageMaker client, and API work end to end with the
-> stub model. Next: evaluation set, endpoint deployment, baseline results. UI and RAG are week 4.
+> Status: Step 2 in progress — agent loop, SageMaker client, and API work end to end with the
+> stub model. Next: evaluation set, endpoint deployment, baseline results. UI and RAG are Step 4.
 
 ## Quick start (no AWS needed)
 
@@ -32,7 +32,8 @@ MODEL_BACKEND=stub uv run uvicorn api.main:app --port 8000
 MODEL_BACKEND=sagemaker SAGEMAKER_ENDPOINT_NAME=<name> AWS_REGION=us-east-2 \
     uv run uvicorn api.main:app --port 8000
 
-curl -s localhost:8000/health
+curl -s localhost:8000/health   # liveness: always 200 while the app is up
+curl -s localhost:8000/ready    # readiness: 503 when the model endpoint isn't InService
 curl -s localhost:8000/v1/ask -H 'content-type: application/json' \
     -d '{"question": "Rank Colorado cities by ZHVI growth in 2025", "include_rows": false}'
 ```
@@ -55,7 +56,7 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `agent/prompts.py` | Planner and answer-writer prompts (catalog injected) |
 | `agent/orchestrator.py` | Bounded agent loop: plan → validate → execute → answer, with retries |
 | `agent/grounding.py` | Numeric-faithfulness check, template answers, clarification text |
-| `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health` |
+| `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
 
 ## Example
 

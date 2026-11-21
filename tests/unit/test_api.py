@@ -21,14 +21,36 @@ def test_health_ok_for_stub(make_client):
     assert r.status_code == 200 and r.json()["status"] == "ok"
 
 
-def test_health_degraded_when_endpoint_not_in_service(make_client):
-    class Down(StubModelClient):
-        def health(self):
-            return {"status": "Creating"}
+class EndpointDown(StubModelClient):
+    def health(self):
+        return {"status": "Creating"}
 
-    with make_client(model=Down()) as c:
+
+def test_health_stays_ok_when_endpoint_is_down(make_client):
+    with make_client(model=EndpointDown()) as c:
         r = c.get("/health")
-    assert r.status_code == 503 and r.json()["status"] == "degraded"
+    assert r.status_code == 200 and r.json()["status"] == "ok"
+
+
+def test_ready_reports_endpoint_not_in_service(make_client):
+    with make_client(model=EndpointDown()) as c:
+        r = c.get("/ready")
+    assert r.status_code == 503 and r.json()["status"] == "not_ready"
+
+
+def test_ready_when_endpoint_unreachable(make_client):
+    class Unreachable(StubModelClient):
+        def health(self):
+            raise ConnectionError("no route")
+
+    with make_client(model=Unreachable()) as c:
+        r = c.get("/ready")
+    assert r.status_code == 503 and r.json()["model"]["status"] == "unreachable"
+
+
+def test_ready_ok_for_stub(make_client):
+    with make_client() as c:
+        assert c.get("/ready").json()["status"] == "ready"
 
 
 def test_catalog(make_client, db):
@@ -80,3 +102,20 @@ def test_api_key_required_when_configured(make_client):
 
 def test_row_cap_constant_is_sane():
     assert MAX_ROWS_IN_RESPONSE >= 1000
+
+
+def test_state_is_validated(make_client):
+    with make_client() as c:
+        bad = {"question": "what about rent?", "state": {"metric": "zhvi", "note": "x" * 10_000}}
+        assert c.post("/v1/ask", json=bad).status_code == 422
+        too_many = {"question": "q", "state": {"cities": [{"city": f"C{i}"} for i in range(21)]}}
+        assert c.post("/v1/ask", json=too_many).status_code == 422
+
+
+def test_updated_state_round_trips_through_the_api(make_client):
+    with make_client() as c:
+        first = c.post("/v1/ask", json={"question": "What was Mead, CO's highest month?"}).json()
+        state = first["updated_state"]
+        assert state["cities"][0]["city"] == "Mead"
+        follow_up = {"question": "Rank Colorado cities", "state": state}
+        assert c.post("/v1/ask", json=follow_up).status_code == 200

@@ -1,5 +1,7 @@
 """Agent HTTP API (design doc §14). OpenAPI docs are served at /docs.
 
+Endpoints: POST /v1/ask, GET /v1/catalog, GET /health (liveness), GET /ready (readiness).
+
 Run locally with the stub model:
     MODEL_BACKEND=stub uv run uvicorn api.main:app --reload
 Against a deployed SageMaker endpoint:
@@ -21,7 +23,7 @@ from agent.model_clients.stub import StubModelClient, demo_rules
 from agent.orchestrator import Agent
 from housing.db import HousingDB
 from tools.operations import OPERATIONS
-from tools.schemas import TOOL_PROTOCOL_VERSION
+from tools.schemas import TOOL_PROTOCOL_VERSION, ConversationState
 
 MAX_ROWS_IN_RESPONSE = 5000
 
@@ -34,7 +36,7 @@ class Message(BaseModel):
 class AskRequest(BaseModel):
     question: Annotated[str, Field(min_length=1, max_length=1000)]
     history: Annotated[list[Message], Field(max_length=20)] = []
-    state: dict[str, Any] = {}
+    state: ConversationState = ConversationState()
     include_rows: bool = True
 
 
@@ -82,21 +84,33 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
 
     @app.get("/health")
     def health(agent: Annotated[Agent, Depends(get_agent)]):
+        """Liveness: the process is up and the dataset is loaded. Always 200 while serving, so
+        host health checks don't restart the app when the (often deleted) endpoint is down."""
+        return {
+            "status": "ok",
+            "dataset_version": agent.db.dataset_version,
+            "model_id": agent.model.model_id,
+        }
+
+    @app.get("/ready")
+    def ready(agent: Annotated[Agent, Depends(get_agent)]):
+        """Readiness: can a question be answered right now? 503 when the model endpoint isn't
+        InService. Use this for UI status, not for host health checks."""
         body: dict[str, Any] = {
             "dataset_version": agent.db.dataset_version,
             "model_id": agent.model.model_id,
         }
-        healthy = True
+        ready_now = True
         check = getattr(agent.model, "health", None)
         if check is not None:
             try:
                 body["model"] = check()
-                healthy = body["model"].get("status") == "InService"
-            except Exception as exc:  # report, don't crash the health check
+                ready_now = body["model"].get("status") == "InService"
+            except Exception as exc:  # report, don't crash the readiness check
                 body["model"] = {"status": "unreachable", "error": type(exc).__name__}
-                healthy = False
-        body["status"] = "ok" if healthy else "degraded"
-        return JSONResponse(body, status_code=200 if healthy else 503)
+                ready_now = False
+        body["status"] = "ready" if ready_now else "not_ready"
+        return JSONResponse(body, status_code=200 if ready_now else 503)
 
     @app.get("/v1/catalog", dependencies=[Depends(require_key)])
     def catalog(agent: Annotated[Agent, Depends(get_agent)]):
@@ -123,7 +137,7 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
         result = agent.run_turn(
             req.question,
             history=[m.model_dump() for m in req.history],
-            state=req.state,
+            state=req.state.model_dump(exclude_defaults=True),
         )
         body = result.model_dump(mode="json")
         art = body.get("artifact")
