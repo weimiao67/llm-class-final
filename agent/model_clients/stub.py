@@ -44,11 +44,12 @@ class StubModelClient:
     ) -> ModelOutput:
         start = time.perf_counter()
         self.calls.append({"messages": messages, "profile": profile.name})
-        if profile.constrained:
+        if profile.step == "plan":
+            user_messages = [m["content"] for m in messages if m["role"] == "user"]
+            # Skip tool-result messages, but a user may type that prefix themselves.
             question = next(
-                m["content"]
-                for m in reversed(messages)
-                if m["role"] == "user" and not m["content"].startswith("TOOL RESULT:")
+                (c for c in reversed(user_messages) if not c.startswith("TOOL RESULT:")),
+                user_messages[-1] if user_messages else "",
             )
             payload = next(
                 (out for pattern, out in self.rules if re.search(pattern, question, re.I)),

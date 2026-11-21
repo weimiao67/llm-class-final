@@ -79,3 +79,19 @@ def test_not_found_text_offers_suggestions():
 def test_iso_months_in_prose_count_as_years():
     assert unsupported_numbers("In 2025-12 the value was $535,000.", EVIDENCE) == []
     assert unsupported_numbers("On 2025-12-01 it was $535,000.", EVIDENCE) == []
+
+
+def test_cross_state_ambiguity_asks_for_the_state():
+    candidates = [
+        {"city": "Springfield", "state": st, "county": f"{st} County"}
+        for st in ["IL", "MO", "MA", "OH", "OR", "VA", "TN", "KY", "MI", "NJ", "PA", "VT", "GA"]
+    ]
+    err = ToolError(
+        kind="ambiguous_city",
+        message="",
+        details={"cities": [{"query": {"city": "Springfield"}, "candidates": candidates}]},
+    )
+    text = clarification_text(err)
+    assert text.startswith('"Springfield" exists in 13 states (GA, IL,')
+    assert "and 1 more" in text and text.endswith("Which state do you mean?")
+    assert "County" not in text

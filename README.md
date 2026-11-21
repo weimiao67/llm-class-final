@@ -5,7 +5,8 @@ trusted code validates each plan, compiles it to parameterized DuckDB SQL, and c
 results deterministically. The model never writes SQL and never supplies the numbers.
 
 > Status: Step 2 in progress — agent loop, SageMaker client, and API work end to end with the
-> stub model. Next: evaluation set, endpoint deployment, baseline results. UI and RAG are Step 4.
+> stub model, and the 200-case eval set scores any model backend. Next: endpoint deployment and
+> baseline results. UI and RAG are Step 4.
 
 ## Quick start (no AWS needed)
 
@@ -57,6 +58,8 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `agent/orchestrator.py` | Bounded agent loop: plan → validate → execute → answer, with retries |
 | `agent/grounding.py` | Numeric-faithfulness check, template answers, clarification text |
 | `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
+| `evaluation/` | Frozen eval set (200 cases), oracle, scorer, runner — see [evaluation/README.md](evaluation/README.md) |
+| `scripts/run_eval.py` | Score a model backend (`oracle`, `stub`, `sagemaker`) on the eval set |
 
 ## Example
 
