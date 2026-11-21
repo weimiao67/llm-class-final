@@ -60,6 +60,8 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
 | `evaluation/` | Frozen eval set (200 cases), oracle, scorer, runner — see [evaluation/README.md](evaluation/README.md) |
 | `scripts/run_eval.py` | Score a model backend (`oracle`, `stub`, `sagemaker`) on the eval set |
+| `scripts/deploy_endpoint.py` | Deploy / check / delete the SageMaker TGI endpoint — see [docs/deployment.md](docs/deployment.md) |
+| `scripts/smoke_endpoint.py` | Check a live endpoint against the decoding settings the agent relies on |
 
 ## Example
 
