@@ -14,6 +14,9 @@ execution role):
     python scripts/deploy_endpoint.py --name final-wm-lora-v1 \
         --model-data s3://<bucket>/final-wm/models/<run>/model.tar.gz
 
+    # Capacity shortage? Let SageMaker fall back through other GPU types (InstancePools):
+    python scripts/deploy_endpoint.py --fallback-instance-types ml.g6.2xlarge ml.g6e.xlarge
+
 The endpoint bills by the hour (ml.g5.2xlarge is about $1.5/h) until --delete.
 """
 
@@ -41,6 +44,27 @@ TGI_LIMITS = {
 }
 
 
+# SageMaker-side time limits. The wait below is derived from them, so the script never stops
+# waiting while SageMaker is still legitimately working (the old fixed 30 min was too short).
+MODEL_DOWNLOAD_TIMEOUT_S = 1200
+STARTUP_HEALTH_CHECK_TIMEOUT_S = 900
+DEFAULT_PROVISION_TIMEOUT_S = 1800  # SageMaker's own capacity wait when we don't set one
+FALLBACK_PROVISION_TIMEOUT_S = 1800  # total capacity wait across all pools (300-3600)
+WAIT_DELAY_S = 30
+MAX_INSTANCE_POOLS = 5
+
+
+def wait_attempts(provision_timeout_s: int | None) -> int:
+    """Waiter attempts covering provisioning + model download + startup check + 5 min margin."""
+    total = (
+        (provision_timeout_s or DEFAULT_PROVISION_TIMEOUT_S)
+        + MODEL_DOWNLOAD_TIMEOUT_S
+        + STARTUP_HEALTH_CHECK_TIMEOUT_S
+        + 300
+    )
+    return -(-total // WAIT_DELAY_S)  # ceiling division
+
+
 def container_env(hf_model_id: str | None, model_data: str | None, hf_token: str | None) -> dict:
     """TGI environment for one model source (exactly one of hf_model_id / model_data)."""
     if bool(hf_model_id) == bool(model_data):
@@ -59,12 +83,50 @@ def container_env(hf_model_id: str | None, model_data: str | None, hf_token: str
     return env
 
 
+def production_variant(
+    name: str, instance_type: str, fallbacks: list[str], provision_timeout_s: int | None
+) -> dict[str, Any]:
+    variant: dict[str, Any] = {
+        "VariantName": "AllTraffic",
+        "ModelName": name,
+        "InitialInstanceCount": 1,
+        "ModelDataDownloadTimeoutInSeconds": MODEL_DOWNLOAD_TIMEOUT_S,
+        "ContainerStartupHealthCheckTimeoutInSeconds": STARTUP_HEALTH_CHECK_TIMEOUT_S,
+    }
+    if provision_timeout_s is not None and not 300 <= provision_timeout_s <= 3600:
+        raise ValueError("provision timeout must be 300-3600 seconds")
+    if not fallbacks:
+        variant["InstanceType"] = instance_type
+        if provision_timeout_s:
+            variant["VariantInstanceProvisionTimeoutInSeconds"] = provision_timeout_s
+        return variant
+    types = list(dict.fromkeys([instance_type, *fallbacks]))  # de-duplicate, keep order
+    if len(types) > MAX_INSTANCE_POOLS:
+        raise ValueError(f"at most {MAX_INSTANCE_POOLS} instance types (got {len(types)})")
+    # Priority 1 is tried first; SageMaker moves to the next pool on insufficient capacity.
+    variant["InstancePools"] = [
+        {"InstanceType": t, "Priority": i} for i, t in enumerate(types, start=1)
+    ]
+    variant["VariantInstanceProvisionTimeoutInSeconds"] = (
+        provision_timeout_s or FALLBACK_PROVISION_TIMEOUT_S
+    )
+    return variant
+
+
 def endpoint_specs(
-    name: str, image: str, role: str, instance_type: str, env: dict, model_data: str | None
+    name: str,
+    image: str,
+    role: str,
+    instance_type: str,
+    env: dict,
+    model_data: str | None,
+    fallbacks: list[str] | None = None,
+    provision_timeout_s: int | None = None,
 ) -> dict[str, dict[str, Any]]:
     container: dict[str, Any] = {"Image": image, "Environment": env}
     if model_data:
         container["ModelDataUrl"] = model_data
+    variant = production_variant(name, instance_type, fallbacks or [], provision_timeout_s)
     return {
         "model": {
             "ModelName": name,
@@ -74,16 +136,7 @@ def endpoint_specs(
         },
         "config": {
             "EndpointConfigName": name,
-            "ProductionVariants": [
-                {
-                    "VariantName": "AllTraffic",
-                    "ModelName": name,
-                    "InstanceType": instance_type,
-                    "InitialInstanceCount": 1,
-                    "ModelDataDownloadTimeoutInSeconds": 1200,
-                    "ContainerStartupHealthCheckTimeoutInSeconds": 900,
-                }
-            ],
+            "ProductionVariants": [variant],
             "Tags": TAGS,
         },
         "endpoint": {"EndpointName": name, "EndpointConfigName": name, "Tags": TAGS},
@@ -140,6 +193,27 @@ def existing_resources(sm, name: str) -> list[str]:
     return found
 
 
+def supports_instance_pools(sm) -> bool:
+    """Whether this boto3/botocore knows the InstancePools field (newer SDKs only)."""
+    shape = sm.meta.service_model.operation_model("CreateEndpointConfig").input_shape
+    return "InstancePools" in shape.members["ProductionVariants"].member.members
+
+
+def create_config(sm, config: dict[str, Any]) -> None:
+    """Create the endpoint config. With InstancePools the variant omits InstanceType; if the
+    service insists on it, retry once with the priority-1 type set as InstanceType."""
+    try:
+        sm.create_endpoint_config(**config)
+    except sm.exceptions.ClientError as error:
+        variant = config["ProductionVariants"][0]
+        message = error.response["Error"]["Message"]
+        if "InstancePools" not in variant or "InstanceType" not in message:
+            raise
+        retry = {**variant, "InstanceType": variant["InstancePools"][0]["InstanceType"]}
+        print(f"Retrying endpoint config with InstanceType set ({message})")
+        sm.create_endpoint_config(**{**config, "ProductionVariants": [retry]})
+
+
 def deploy(sm, specs: dict[str, dict[str, Any]], wait: bool) -> int:
     """Create model, endpoint config, and endpoint. Returns a process exit code."""
     from botocore.exceptions import WaiterError
@@ -157,7 +231,7 @@ def deploy(sm, specs: dict[str, dict[str, Any]], wait: bool) -> int:
     try:
         for label, call, spec in (
             ("model", sm.create_model, specs["model"]),
-            ("endpoint config", sm.create_endpoint_config, specs["config"]),
+            ("endpoint config", lambda **c: create_config(sm, c), specs["config"]),
             ("endpoint", sm.create_endpoint, specs["endpoint"]),
         ):
             call(**spec)
@@ -173,8 +247,11 @@ def deploy(sm, specs: dict[str, dict[str, Any]], wait: bool) -> int:
         print(f"Check with --status; delete when done: {delete_hint(name)}")
         return 0
     try:
+        variant = specs["config"]["ProductionVariants"][0]
+        attempts = wait_attempts(variant.get("VariantInstanceProvisionTimeoutInSeconds"))
+        print(f"Waiting up to {attempts * WAIT_DELAY_S // 60} min (returns as soon as it's ready).")
         sm.get_waiter("endpoint_in_service").wait(
-            EndpointName=name, WaiterConfig={"Delay": 30, "MaxAttempts": 60}
+            EndpointName=name, WaiterConfig={"Delay": WAIT_DELAY_S, "MaxAttempts": attempts}
         )
     except WaiterError as error:
         print(f"Endpoint did not reach InService: {error}")
@@ -221,7 +298,20 @@ def main(argv: list[str] | None = None) -> int:
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--hf-model-id", help=f"Hub model (default: {DEFAULT_HF_MODEL})")
     source.add_argument("--model-data", help="s3://.../model.tar.gz with merged weights")
-    parser.add_argument("--instance-type", default=DEFAULT_INSTANCE)
+    parser.add_argument("--instance-type", default=DEFAULT_INSTANCE, help="priority-1 type")
+    parser.add_argument(
+        "--fallback-instance-types",
+        nargs="+",
+        default=[],
+        metavar="TYPE",
+        help="tried in order when the primary type has no capacity (SageMaker InstancePools)",
+    )
+    parser.add_argument(
+        "--provision-timeout",
+        type=int,
+        help=f"seconds to wait for capacity across all types (300-3600; "
+        f"default {FALLBACK_PROVISION_TIMEOUT_S} with fallbacks)",
+    )
     parser.add_argument("--tgi-version", default=TGI_VERSION)
     parser.add_argument("--image-uri", help="override the TGI image (skips the SDK lookup)")
     parser.add_argument("--role", help="execution role ARN (default: Studio's)")
@@ -242,8 +332,24 @@ def main(argv: list[str] | None = None) -> int:
     env = container_env(hf_model, args.model_data, os.environ.get("HF_TOKEN"))
     image = args.image_uri or tgi_image_uri(args.instance_type, args.tgi_version)
     specs = endpoint_specs(
-        args.name, image, args.role or execution_role(), args.instance_type, env, args.model_data
+        args.name,
+        image,
+        args.role or execution_role(),
+        args.instance_type,
+        env,
+        args.model_data,
+        fallbacks=args.fallback_instance_types,
+        provision_timeout_s=args.provision_timeout,
     )
+    uses_new_fields = args.fallback_instance_types or args.provision_timeout
+    if uses_new_fields and not supports_instance_pools(sm):
+        import botocore
+
+        print(
+            f"This boto3/botocore ({botocore.__version__}) does not know InstancePools. "
+            "Upgrade it (pip install --user -U boto3 botocore) or deploy one --instance-type."
+        )
+        return 1
     return deploy(sm, specs, wait=not args.no_wait)
 
 

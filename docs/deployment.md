@@ -68,6 +68,22 @@ python scripts/deploy_endpoint.py # → "final-wm-llama32-3b-base is InService."
 python scripts/deploy_endpoint.py --status
 ```
 
+**If it fails with `InsufficientInstanceCapacity`**, AWS has no free GPU of that type in the
+Region right now. Delete the failed endpoint, then let SageMaker fall back through other GPU
+types. It tries them in order (InstancePools), and each one needs endpoint quota:
+
+```bash
+python scripts/deploy_endpoint.py --delete
+python -c "import boto3; print(boto3.__version__)"   # InstancePools needs a recent boto3
+python scripts/deploy_endpoint.py --fallback-instance-types ml.g6.2xlarge ml.g6e.xlarge
+```
+
+To check quotas, go to Service Quotas → Amazon SageMaker → "… for endpoint usage". If the script
+says this boto3 doesn't know InstancePools, run `pip install --user -U boto3 botocore` first, or
+deploy a single type with `--instance-type ml.g6.2xlarge`. The script waits as long as
+SageMaker's own time limits allow (about an hour at most) and returns as soon as the endpoint is
+ready.
+
 The token is passed to the container as an environment variable, so anyone in the account who can
 run `DescribeModel` can see it. Use a read-only token, and revoke it after the project.
 

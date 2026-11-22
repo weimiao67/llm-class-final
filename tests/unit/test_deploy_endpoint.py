@@ -147,3 +147,82 @@ def test_failed_endpoint_reports_status_and_delete_hint(sm, capsys):
     out = capsys.readouterr().out
     assert "did not reach InService" in out and "CUDA out of memory" in out
     assert "may still be billing" in out and f"--delete --name {NAME}" in out
+
+
+# ---- capacity fallback and wait sizing -------------------------------------------------------
+
+
+def test_single_type_variant_is_unchanged_by_default():
+    v = deploy.production_variant(NAME, "ml.g5.2xlarge", [], None)
+    assert v["InstanceType"] == "ml.g5.2xlarge"
+    assert "InstancePools" not in v and "VariantInstanceProvisionTimeoutInSeconds" not in v
+
+
+def test_fallbacks_become_prioritized_instance_pools():
+    v = deploy.production_variant(
+        NAME, "ml.g5.2xlarge", ["ml.g6.2xlarge", "ml.g5.2xlarge", "ml.g6e.xlarge"], None
+    )
+    assert "InstanceType" not in v
+    assert v["InstancePools"] == [
+        {"InstanceType": "ml.g5.2xlarge", "Priority": 1},
+        {"InstanceType": "ml.g6.2xlarge", "Priority": 2},
+        {"InstanceType": "ml.g6e.xlarge", "Priority": 3},
+    ]
+    assert v["VariantInstanceProvisionTimeoutInSeconds"] == deploy.FALLBACK_PROVISION_TIMEOUT_S
+
+
+def test_pool_and_timeout_limits():
+    with pytest.raises(ValueError, match="at most 5"):
+        deploy.production_variant(NAME, "a", ["b", "c", "d", "e", "f"], None)
+    with pytest.raises(ValueError, match="300-3600"):
+        deploy.production_variant(NAME, "a", [], 120)
+
+
+def test_wait_covers_every_sagemaker_timeout():
+    # Old bug: a fixed 30 min wait was shorter than download (20) + startup check (15) alone.
+    for provision in (None, 300, 3600):
+        waited = deploy.wait_attempts(provision) * deploy.WAIT_DELAY_S
+        covered = (
+            (provision or deploy.DEFAULT_PROVISION_TIMEOUT_S)
+            + deploy.MODEL_DOWNLOAD_TIMEOUT_S
+            + deploy.STARTUP_HEALTH_CHECK_TIMEOUT_S
+        )
+        assert waited > covered
+
+
+def test_pinned_boto3_supports_instance_pools(sm):
+    client, _ = sm
+    assert deploy.supports_instance_pools(client)
+
+
+def _pool_specs():
+    env = deploy.container_env("m", None, "t")
+    return deploy.endpoint_specs(
+        NAME, "img", ROLE, "ml.g5.2xlarge", env, None, fallbacks=["ml.g6.2xlarge"]
+    )
+
+
+def test_config_retries_with_instance_type_if_service_requires_it(sm, capsys):
+    client, stub = sm
+    config = _pool_specs()["config"]
+    stub.add_client_error(
+        "create_endpoint_config", "ValidationException", "InstanceType is required"
+    )
+    retried = {
+        **config,
+        "ProductionVariants": [
+            {**config["ProductionVariants"][0], "InstanceType": "ml.g5.2xlarge"}
+        ],
+    }
+    stub.add_response(
+        "create_endpoint_config", {"EndpointConfigArn": f"{ARN}:endpoint-config/{NAME}"}, retried
+    )
+    deploy.create_config(client, config)
+    assert "Retrying endpoint config with InstanceType set" in capsys.readouterr().out
+
+
+def test_config_does_not_retry_unrelated_errors(sm):
+    client, stub = sm
+    stub.add_client_error("create_endpoint_config", "ResourceLimitExceeded", "quota exceeded")
+    with pytest.raises(client.exceptions.ClientError):
+        deploy.create_config(client, _pool_specs()["config"])
