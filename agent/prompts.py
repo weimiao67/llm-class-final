@@ -118,9 +118,12 @@ def tool_result_message(payload: dict[str, Any]) -> dict[str, str]:
 
 RETRY_INSTRUCTION = (
     "Your previous tool call was rejected for the reasons above. This message is from the "
-    "system, not the user. Output a corrected tool call for the user's original question: "
-    "fix only the listed fields and call the same tool again. Do not respond to the user about "
-    "this error and do not repeat it to them."
+    "system, not the user. Do not repeat this error to the user. Choose one: (a) if the "
+    "question can be answered with the available fields and operations, output a corrected "
+    "tool call that fixes the listed fields; or (b) if it cannot (for example it needs a field "
+    "the database doesn't have, such as bedrooms, or an operation that isn't listed, such as "
+    'correlation), call respond with kind "unsupported" (or "out_of_scope" for '
+    "forecasts) and name what is missing. Never answer a different question than the user asked."
 )
 
 

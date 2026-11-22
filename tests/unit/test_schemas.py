@@ -128,7 +128,7 @@ def test_decoding_schema_enforces_exactly_one_scope():
     assert "cities" in city_scoped["required"] and "state_filter" not in city_scoped["properties"]
     assert city_scoped["properties"]["cities"]["minItems"] == 1
     assert "state_filter" in state_scoped["required"] and "cities" not in state_scoped["properties"]
-    assert state_scoped["properties"]["state_filter"] == {"type": "string"}
+    assert state_scoped["properties"]["state_filter"]["type"] == "string"
 
 
 def test_bounds_dropped_from_decoding_are_still_enforced_by_validation():
@@ -138,3 +138,17 @@ def test_bounds_dropped_from_decoding_are_still_enforced_by_validation():
         ToolCall.model_validate(
             {"call": {"tool": "respond", "kind": "clarify", "text": "x" * 2001}}  # maxLength
         )
+
+
+def test_decoding_schema_restricts_states_to_codes():
+    from tools.schemas import US_STATE_CODES
+
+    _, (city_scoped, state_scoped) = _analyze_plan_variants()
+    assert state_scoped["properties"]["state_filter"]["enum"] == list(US_STATE_CODES)
+    city_state = city_scoped["properties"]["cities"]["items"]["properties"]["state"]
+    assert {"type": "string", "enum": list(US_STATE_CODES)} in city_state["anyOf"]
+    assert {"type": "null"} in city_state["anyOf"]  # the state stays optional
+    assert len(US_STATE_CODES) == 51 and all(
+        AnalysisPlan.model_validate(plan(cities=[{"city": "X", "state": c}]))
+        for c in US_STATE_CODES
+    )

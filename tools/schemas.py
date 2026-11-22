@@ -22,6 +22,62 @@ Month = Annotated[
 StateCode = Annotated[str, Field(pattern=r"^[A-Z]{2}$", description="Two-letter state code")]
 
 MAX_CITIES = 20
+
+# 50 states + DC. Used as an enum in the decoding schema: a short list is cheap for grammars
+# (unlike long length bounds) and rules out names like "Colorado" where a code is required.
+US_STATE_CODES = (
+    "AK",
+    "AL",
+    "AR",
+    "AZ",
+    "CA",
+    "CO",
+    "CT",
+    "DC",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "IA",
+    "ID",
+    "IL",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "MA",
+    "MD",
+    "ME",
+    "MI",
+    "MN",
+    "MO",
+    "MS",
+    "MT",
+    "NC",
+    "ND",
+    "NE",
+    "NH",
+    "NJ",
+    "NM",
+    "NV",
+    "NY",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VA",
+    "VT",
+    "WA",
+    "WI",
+    "WV",
+    "WY",
+)
 MAX_LIMIT = 50
 
 
@@ -205,10 +261,20 @@ def _scoped_plan_variants(plan: dict[str, Any]) -> dict[str, Any]:
     props = plan["properties"]
     required = plan.get("required", [])
 
+    state_enum = {"type": "string", "enum": list(US_STATE_CODES)}
+    city_item = props["cities"]["items"]
+    city_item = {
+        **city_item,
+        "properties": {
+            **city_item["properties"],
+            "state": {"anyOf": [state_enum, {"type": "null"}]},
+        },
+    }
     city_props = {k: v for k, v in props.items() if k != "state_filter"}
-    city_props["cities"] = {**props["cities"], "minItems": 1}  # small bound: cheap for grammars
+    # minItems 1 is a small bound, cheap for grammars.
+    city_props["cities"] = {**props["cities"], "items": city_item, "minItems": 1}
     state_props = {k: v for k, v in props.items() if k != "cities"}
-    state_props["state_filter"] = {"type": "string"}  # required, so never null here
+    state_props["state_filter"] = state_enum  # required here, so never null
 
     def variant(properties: dict[str, Any], scope: str) -> dict[str, Any]:
         return {

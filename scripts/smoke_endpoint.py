@@ -42,6 +42,33 @@ CONTROL = [
 ]
 
 
+def shaped(text: str) -> str:
+    """Return the tool name if ``text`` has the decoding schema's top-level shape
+    ({"call": {"tool": ...}}); otherwise raise ValueError (for any malformed reply)."""
+    try:
+        call = json.loads(text)["call"]
+        tool = call["tool"]
+    except (ValueError, KeyError, TypeError) as exc:  # bad JSON, missing keys, wrong types
+        raise ValueError(f"not a tool call: {exc}") from exc
+    if tool not in {"analyze", "search_knowledge", "respond"}:
+        raise ValueError(f"unknown tool {tool!r}")
+    return tool
+
+
+def describe(text: str) -> str:
+    """Shape and full-validation status of a planner reply, for the report."""
+    try:
+        tool = shaped(text)
+    except ValueError as exc:
+        return f"not schema-shaped ({exc}): {text[:200]!r}"
+    try:
+        ToolCall.model_validate_json(text)
+        return f"tool={tool}, valid plan: {text[:200]}"
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        return f"tool={tool}, fails validation ({first['msg']}): {text[:200]}"
+
+
 def check(label: str, fn) -> bool:
     try:
         ok, detail = fn()
@@ -76,26 +103,6 @@ def main() -> int:
     schema = decoding_schema()
     unconstrained_plan = dataclasses.replace(decoding.PLAN, constrained=False)
 
-    def shaped(text: str) -> str:
-        """Raise unless ``text`` has the decoding schema's top-level shape; return the tool."""
-        call = json.loads(text)["call"]
-        if call.get("tool") not in {"analyze", "search_knowledge", "respond"}:
-            raise ValueError(f"unknown tool {call.get('tool')!r}")
-        return call["tool"]
-
-    def describe(text: str) -> str:
-        """Shape and full-validation status of a planner reply, for the report."""
-        try:
-            tool = shaped(text)
-        except (ValueError, KeyError, TypeError) as exc:
-            return f"not schema-shaped ({type(exc).__name__}): {text[:200]!r}"
-        try:
-            ToolCall.model_validate_json(text)
-            return f"tool={tool}, valid plan: {text[:200]}"
-        except ValidationError as exc:
-            first = exc.errors()[0]
-            return f"tool={tool}, fails validation ({first['msg']}): {text[:200]}"
-
     def unconstrained():
         out = client.complete(messages, unconstrained_plan, None)
         # Passing means the server answered; reply quality is what the ablation measures.
@@ -118,13 +125,13 @@ def main() -> int:
         with_schema = client.complete(CONTROL, decoding.PLAN, schema).text
         try:
             tool = shaped(with_schema)
-        except (ValueError, KeyError, TypeError):
+        except ValueError:
             return False, f"constraint NOT applied: schema sent, model replied {with_schema!r}"
         without = client.complete(CONTROL, unconstrained_plan, None).text
         try:
             shaped(without)
             control = "inconclusive: the model returned a tool call even without the schema"
-        except (ValueError, KeyError, TypeError):
+        except ValueError:
             control = f"without schema it replied {without[:60]!r}"
         return True, f"schema forced a tool call (tool={tool}); {control}"
 
