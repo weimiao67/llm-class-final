@@ -93,18 +93,20 @@ run `DescribeModel` can see it. Use a read-only token, and revoke it after the p
 uv run python scripts/smoke_endpoint.py --endpoint final-wm-llama32-3b-base
 ```
 
-It runs five checks:
+It runs five checks, simplest first, so the first failure tells you where the problem is:
 
-- TGI accepts the JSON-schema constraint (`response_format`).
-- The constraint is actually enforced. This is a negative control: asked to reply "hello", the
-  model must still return a tool call when the schema is sent.
-- Greedy decoding is deterministic.
-- Requests without the constraint still work.
-- Sampled answers return text.
+1. The server answers a plan request without a schema. If this fails, the server itself is
+   stuck or down: check the endpoint logs.
+2. Sampled answers return text.
+3. TGI accepts the decoding schema (`response_format`), and the reply is a valid tool call.
+4. The constraint is actually enforced. This is a negative control: asked to reply "hello", the
+   model must still return a tool call when the schema is sent.
+5. Greedy decoding is deterministic.
 
-**If either of the first two checks fails, stop here** (go to step 7) and share the output. It
-usually means TGI rejected or ignored part of the schema, and the fix belongs in the code, not the
-endpoint.
+**If check 3 or 4 fails, stop here** (go to step 7) and share the output. It means TGI rejected,
+ignored, or couldn't compile the schema, and the fix belongs in the code, not the endpoint. The
+agent sends TGI a structure-only copy of the schema (`decoding_schema()`, with no length limits
+or patterns, which made grammar compilation hang). Pydantic still checks every rule afterwards.
 
 If a deploy fails or times out, `deploy_endpoint.py` prints what already exists and the exact
 `--delete --name …` command. It also refuses to deploy over leftover resources with the same name.

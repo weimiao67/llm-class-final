@@ -144,5 +144,48 @@ class QueryArtifact(BaseModel):
 
 
 def tool_call_json_schema() -> dict[str, Any]:
-    """JSON Schema for prompts and grammar-constrained decoding."""
+    """Full JSON Schema of the tool call (documentation and validation reference)."""
     return ToolCall.model_json_schema()
+
+
+# Keywords that make grammar compilation explode or that grammar engines don't need. Length bounds
+# turn into huge repetition automata (text up to 2000 characters), and regex patterns (months,
+# states) multiply states. Pydantic still enforces all of them after decoding, so removing them
+# here doesn't loosen validation; a violation goes back to the model as a normal retry.
+_DECODING_DROP = {
+    "maxLength",
+    "minLength",
+    "pattern",
+    "maxItems",
+    "minItems",
+    "maximum",
+    "minimum",
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "discriminator",
+    "title",
+    "description",
+    "default",
+    "format",
+}
+
+
+def decoding_schema() -> dict[str, Any]:
+    """Structure-only schema for constrained decoding (TGI ``response_format``).
+
+    It keeps object shapes, required fields, enums, and types, inlines every ``$ref``, and drops
+    the keywords above, so the grammar stays small enough to compile quickly.
+    """
+    full = ToolCall.model_json_schema()
+    defs = full.pop("$defs", {})
+
+    def clean(node: Any) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return clean(defs[node["$ref"].rsplit("/", 1)[-1]])
+            return {k: clean(v) for k, v in node.items() if k not in _DECODING_DROP}
+        if isinstance(node, list):
+            return [clean(v) for v in node]
+        return node
+
+    return clean(full)

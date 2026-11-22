@@ -1,14 +1,17 @@
 """Check a live TGI endpoint against the request settings the agent relies on (design doc §10).
 
-Checks, using the real planner prompt:
-  1. constrained greedy planning: TGI accepts `response_format` with the ToolCall JSON Schema,
-     and the reply parses as a valid tool call
-  2. the constraint is really enforced (negative control): asked to reply "hello", the model
+Checks run from simplest to riskiest, so a failure says where the problem is:
+  1. unconstrained plan request (no schema): is the server answering at all?
+  2. sampled answer writing (temperature 0.3, top_p 0.9) returns text
+  3. constrained greedy planning: TGI accepts `response_format` with the decoding schema, and the
+     reply parses as a valid tool call
+  4. the constraint is really enforced (negative control): asked to reply "hello", the model
      still returns a valid tool call when the schema is sent, and plain text when it isn't.
-     Check 1 alone can't show this, because the planner prompt already asks for JSON.
-  3. greedy is deterministic: the same request twice gives the same text
-  4. unconstrained planning still answers (needed for the "no constraint" ablation rows)
-  5. sampled answer writing (temperature 0.3, top_p 0.9) returns text
+     Check 3 alone can't show this, because the planner prompt already asks for JSON.
+  5. greedy is deterministic: the same request twice gives the same text
+
+Requests are not retried (a timed-out request re-sent would queue behind itself), and each may
+take up to --timeout seconds (SageMaker real-time invocations are capped at 60 s).
 
 Usage (Studio terminal, repo root, endpoint InService):
     uv run python scripts/smoke_endpoint.py --endpoint final-wm-llama32-3b-base
@@ -28,7 +31,7 @@ from agent import decoding
 from agent.model_clients.sagemaker import SageMakerModelClient
 from agent.prompts import answer_messages, planner_messages
 from housing.db import HousingDB
-from tools.schemas import ToolCall, tool_call_json_schema
+from tools.schemas import ToolCall, decoding_schema
 
 QUESTION = "Rank Colorado cities by ZHVI growth in 2025."
 CONTROL = [
@@ -42,7 +45,7 @@ def check(label: str, fn) -> bool:
         ok, detail = fn()
     except Exception as exc:  # show TGI's validation message (e.g. unsupported schema feature)
         ok, detail = False, f"{type(exc).__name__}: {exc}"
-    print(f"[{'PASS' if ok else 'FAIL'}] {label}\n       {detail}")
+    print(f"[{'PASS' if ok else 'FAIL'}] {label}\n       {detail}", flush=True)
     return ok
 
 
@@ -51,9 +54,12 @@ def main() -> int:
     parser.add_argument("--endpoint", required=True)
     parser.add_argument("--region", default="us-east-2")
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
+    parser.add_argument("--timeout", type=int, default=65, help="seconds per request")
     args = parser.parse_args()
 
-    client = SageMakerModelClient(args.endpoint, region=args.region)
+    client = SageMakerModelClient(
+        args.endpoint, region=args.region, timeout_s=args.timeout, total_attempts=1
+    )
     try:
         health = client.health()
     except Exception as exc:
@@ -63,13 +69,28 @@ def main() -> int:
     if health["status"] != "InService":
         print(f"Endpoint {args.endpoint!r} is {health['status']}, not InService; try again later.")
         return 2
-    print("endpoint:", health)
+    print("endpoint:", health, flush=True)
     messages = planner_messages(HousingDB(args.data_dir), QUESTION, [], None)
-    schema = tool_call_json_schema()
+    schema = decoding_schema()
+    unconstrained_plan = dataclasses.replace(decoding.PLAN, constrained=False)
 
     def parse(text: str) -> str:
         call = ToolCall.model_validate_json(text).call
         return f"tool={call.tool} " + json.dumps(call.model_dump(exclude_none=True))[:200]
+
+    def unconstrained():
+        out = client.complete(messages, unconstrained_plan, None)
+        try:
+            return True, f"{out.latency_ms:.0f} ms, {out.usage} → {parse(out.text)}"
+        except ValidationError:
+            # Not a transport failure: the model answered without a valid tool call. That is
+            # exactly what the constrained/unconstrained ablation measures.
+            return True, f"{out.latency_ms:.0f} ms; not a valid tool call: {out.text[:200]!r}"
+
+    def answer():
+        evidence = {"summary": {"top": [{"city": "Telluride", "pct_change": 8.95}]}}
+        out = client.complete(answer_messages(QUESTION, evidence), decoding.ANSWER)
+        return bool(out.text.strip()), f"{out.latency_ms:.0f} ms → {out.text[:200]!r}"
 
     outputs: list[str] = []
 
@@ -84,7 +105,7 @@ def main() -> int:
             parsed = parse(with_schema)
         except ValidationError:
             return False, f"constraint NOT applied: schema sent, model replied {with_schema!r}"
-        without = client.complete(CONTROL, decoding.PLAN, None).text
+        without = client.complete(CONTROL, unconstrained_plan, None).text
         try:
             parse(without)
             control = "inconclusive: the model returned a tool call even without the schema"
@@ -96,29 +117,21 @@ def main() -> int:
         again = client.complete(messages, decoding.PLAN, schema).text
         return again == outputs[0], "identical" if again == outputs[0] else f"differs: {again!r}"
 
-    def unconstrained():
-        profile = dataclasses.replace(decoding.PLAN, constrained=False)
-        out = client.complete(messages, profile, None)
-        try:
-            return True, f"{out.latency_ms:.0f} ms → {parse(out.text)}"
-        except ValidationError:
-            # Not a transport failure: the model answered but without a valid tool call. That is
-            # exactly what the constrained/unconstrained ablation measures.
-            return True, f"reply is not a valid tool call (expected sometimes): {out.text[:200]!r}"
-
-    def answer():
-        evidence = {"summary": {"top": [{"city": "Telluride", "pct_change": 8.95}]}}
-        out = client.complete(answer_messages(QUESTION, evidence), decoding.ANSWER)
-        return bool(out.text.strip()), f"{out.latency_ms:.0f} ms → {out.text[:200]!r}"
-
-    results = [check("constrained greedy plan parses as a tool call", constrained)]
-    results.append(check("schema constraint is enforced (negative control)", enforced))
-    if results[0]:
+    server_ok = check("server answers an unconstrained plan request", unconstrained)
+    if not server_ok:
+        print(
+            "\nThe server doesn't answer even without a schema: check the endpoint logs\n"
+            "(aws logs tail /aws/sagemaker/Endpoints/<name> --since 30m). If an earlier run\n"
+            "sent a schema, TGI may still be compiling it; wait a few minutes and retry."
+        )
+        return 1
+    results = [server_ok, check("sampled answer returns text", answer)]
+    results.append(check("constrained greedy plan parses as a tool call", constrained))
+    if results[-1]:
+        results.append(check("schema constraint is enforced (negative control)", enforced))
         results.append(check("greedy decoding is deterministic", deterministic))
-    results.append(check("unconstrained plan request succeeds", unconstrained))
-    results.append(check("sampled answer returns text", answer))
     print(f"\n{sum(results)}/{len(results)} checks passed")
-    return 0 if all(results) else 1
+    return 0 if all(results) and len(results) == 5 else 1
 
 
 if __name__ == "__main__":

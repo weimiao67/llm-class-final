@@ -55,3 +55,68 @@ def test_tool_call_envelope_discriminates_by_tool():
 def test_json_schema_is_exportable():
     schema = tool_call_json_schema()
     assert "AnalysisPlan" in schema["$defs"]
+
+
+# ---- decoding schema (sent to TGI for grammar-constrained decoding) --------------------------
+
+
+def _walk_keys(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield k
+            yield from _walk_keys(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _walk_keys(v)
+
+
+def test_decoding_schema_has_no_grammar_blowup_keywords():
+    from tools.schemas import decoding_schema
+
+    keys = set(_walk_keys(decoding_schema()))
+    assert not keys & {
+        "$ref",
+        "$defs",
+        "maxLength",
+        "minLength",
+        "pattern",
+        "maxItems",
+        "discriminator",
+        "default",
+    }
+
+
+def test_decoding_schema_keeps_structure_enums_and_required_fields():
+    import json
+
+    from tools.schemas import decoding_schema
+
+    schema = decoding_schema()
+    options = schema["properties"]["call"]["oneOf"]
+    tools = {o["properties"]["tool"]["const"] for o in options}
+    assert tools == {"analyze", "search_knowledge", "respond"}
+    analyze = next(o for o in options if o["properties"]["tool"]["const"] == "analyze")
+    plan = analyze["properties"]["plan"]
+    assert set(plan["required"]) == {"metric", "operation"}
+    assert plan["properties"]["operation"]["enum"] == [
+        "series",
+        "change",
+        "yoy_change",
+        "extrema",
+        "rank",
+        "aggregate",
+        "coverage",
+    ]
+    assert plan["additionalProperties"] is False
+    respond = next(o for o in options if o["properties"]["tool"]["const"] == "respond")
+    assert respond["properties"]["kind"]["enum"] == ["clarify", "unsupported", "out_of_scope"]
+    assert len(json.dumps(schema)) < len(json.dumps(tool_call_json_schema()))
+
+
+def test_bounds_dropped_from_decoding_are_still_enforced_by_validation():
+    with pytest.raises(ValidationError):
+        AnalysisPlan.model_validate(plan(start_month="2025-1"))  # pattern
+    with pytest.raises(ValidationError):
+        ToolCall.model_validate(
+            {"call": {"tool": "respond", "kind": "clarify", "text": "x" * 2001}}  # maxLength
+        )

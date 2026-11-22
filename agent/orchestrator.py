@@ -33,7 +33,7 @@ from tools.schemas import (
     SearchKnowledgeCall,
     ToolCall,
     ToolError,
-    tool_call_json_schema,
+    decoding_schema,
 )
 from tools.validator import PlanValidator, ValidatedPlan, field_errors
 
@@ -129,7 +129,7 @@ class Agent:
         self.model = model
         self.knowledge = knowledge
         self.validator = validator or PlanValidator(db)
-        self._schema = tool_call_json_schema()
+        self._schema = decoding_schema()  # structure only; pydantic validates fully after
 
     # ---- public --------------------------------------------------------------------------------
 
