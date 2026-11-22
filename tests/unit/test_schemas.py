@@ -86,31 +86,49 @@ def test_decoding_schema_has_no_grammar_blowup_keywords():
     }
 
 
+def _analyze_plan_variants():
+    from tools.schemas import decoding_schema
+
+    options = decoding_schema()["properties"]["call"]["oneOf"]
+    analyze = next(o for o in options if o["properties"]["tool"]["const"] == "analyze")
+    return options, analyze["properties"]["plan"]["oneOf"]
+
+
 def test_decoding_schema_keeps_structure_enums_and_required_fields():
     import json
 
     from tools.schemas import decoding_schema
 
-    schema = decoding_schema()
-    options = schema["properties"]["call"]["oneOf"]
-    tools = {o["properties"]["tool"]["const"] for o in options}
-    assert tools == {"analyze", "search_knowledge", "respond"}
-    analyze = next(o for o in options if o["properties"]["tool"]["const"] == "analyze")
-    plan = analyze["properties"]["plan"]
-    assert set(plan["required"]) == {"metric", "operation"}
-    assert plan["properties"]["operation"]["enum"] == [
-        "series",
-        "change",
-        "yoy_change",
-        "extrema",
-        "rank",
-        "aggregate",
-        "coverage",
-    ]
-    assert plan["additionalProperties"] is False
+    options, variants = _analyze_plan_variants()
+    assert {o["properties"]["tool"]["const"] for o in options} == {
+        "analyze",
+        "search_knowledge",
+        "respond",
+    }
+    for plan_variant in variants:
+        assert {"metric", "operation"} <= set(plan_variant["required"])
+        assert plan_variant["properties"]["operation"]["enum"] == [
+            "series",
+            "change",
+            "yoy_change",
+            "extrema",
+            "rank",
+            "aggregate",
+            "coverage",
+        ]
+        assert plan_variant["additionalProperties"] is False
     respond = next(o for o in options if o["properties"]["tool"]["const"] == "respond")
     assert respond["properties"]["kind"]["enum"] == ["clarify", "unsupported", "out_of_scope"]
-    assert len(json.dumps(schema)) < len(json.dumps(tool_call_json_schema()))
+    assert len(json.dumps(decoding_schema())) < len(json.dumps(tool_call_json_schema()))
+
+
+def test_decoding_schema_enforces_exactly_one_scope():
+    # The baseline's most common failure: plans with both or neither of cities/state_filter.
+    _, (city_scoped, state_scoped) = _analyze_plan_variants()
+    assert "cities" in city_scoped["required"] and "state_filter" not in city_scoped["properties"]
+    assert city_scoped["properties"]["cities"]["minItems"] == 1
+    assert "state_filter" in state_scoped["required"] and "cities" not in state_scoped["properties"]
+    assert state_scoped["properties"]["state_filter"] == {"type": "string"}
 
 
 def test_bounds_dropped_from_decoding_are_still_enforced_by_validation():

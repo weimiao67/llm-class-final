@@ -20,7 +20,7 @@ from agent.prompts import (
     PROMPT_VERSION,
     answer_messages,
     planner_messages,
-    tool_result_message,
+    retry_message,
 )
 from housing.db import HousingDB
 from tools.knowledge import KnowledgeBase, Passage
@@ -181,7 +181,7 @@ class Agent:
                 if retries > MAX_PLAN_RETRIES:
                     return self._give_up(turn, state)
                 messages.append(
-                    tool_result_message({"error": "invalid_tool_call", "errors": field_errors(exc)})
+                    retry_message({"error": "invalid_tool_call", "errors": field_errors(exc)})
                 )
                 continue
 
@@ -214,7 +214,7 @@ class Agent:
                 turn.event(step, "analyze", "retry", ms, err.kind)
                 if retries > MAX_PLAN_RETRIES:
                     return self._give_up(turn, state)
-                messages.append(tool_result_message(err.model_dump()))
+                messages.append(retry_message(err.model_dump()))
                 continue
 
             turn.event(step, "analyze", "stop", ms, err.kind)

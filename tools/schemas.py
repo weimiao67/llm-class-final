@@ -175,6 +175,11 @@ def decoding_schema() -> dict[str, Any]:
 
     It keeps object shapes, required fields, enums, and types, inlines every ``$ref``, and drops
     the keywords above, so the grammar stays small enough to compile quickly.
+
+    The analysis plan is split into two variants, so the grammar itself enforces the scope rule
+    that the baseline model broke most often ("exactly one of cities or state_filter"): a
+    city-scoped plan has a non-empty ``cities`` list and no ``state_filter``, and a state-scoped
+    plan has ``state_filter`` and no ``cities``.
     """
     full = ToolCall.model_json_schema()
     defs = full.pop("$defs", {})
@@ -188,4 +193,29 @@ def decoding_schema() -> dict[str, Any]:
             return [clean(v) for v in node]
         return node
 
-    return clean(full)
+    schema = clean(full)
+    for option in schema["properties"]["call"]["oneOf"]:
+        if option["properties"]["tool"].get("const") == "analyze":
+            option["properties"]["plan"] = _scoped_plan_variants(option["properties"]["plan"])
+    return schema
+
+
+def _scoped_plan_variants(plan: dict[str, Any]) -> dict[str, Any]:
+    """Replace one plan object with city-scoped | state-scoped variants (see decoding_schema)."""
+    props = plan["properties"]
+    required = plan.get("required", [])
+
+    city_props = {k: v for k, v in props.items() if k != "state_filter"}
+    city_props["cities"] = {**props["cities"], "minItems": 1}  # small bound: cheap for grammars
+    state_props = {k: v for k, v in props.items() if k != "cities"}
+    state_props["state_filter"] = {"type": "string"}  # required, so never null here
+
+    def variant(properties: dict[str, Any], scope: str) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": properties,
+            "required": [*required, scope],
+        }
+
+    return {"oneOf": [variant(city_props, "cities"), variant(state_props, "state_filter")]}
