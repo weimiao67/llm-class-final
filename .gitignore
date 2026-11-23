@@ -9,3 +9,6 @@ data/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# Local settings for docker compose (may hold API_KEY)
+.env

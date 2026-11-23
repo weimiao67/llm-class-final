@@ -1,0 +1,12 @@
+# Only source goes into the build context; data is mounted at run time.
+*
+!pyproject.toml
+!uv.lock
+!housing/
+!tools/
+!agent/
+!api/
+!rag/
+!ui/
+**/__pycache__
+**/*.pyc
