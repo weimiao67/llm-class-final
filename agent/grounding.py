@@ -32,6 +32,11 @@ def _walk(obj: Any, out: list[float], years: set[int]) -> None:
     elif isinstance(obj, str):
         if re.fullmatch(r"\d{4}-\d{2}(-\d{2})?", obj):
             years.add(int(obj[:4]))
+        elif " " in obj:
+            # Sentences written by trusted code (warnings, notes) are evidence too: an answer
+            # may repeat "Summary shows the 10 largest of 343 cities". Bare identifiers such as
+            # region_id "11093" have no spaces and stay excluded.
+            out.extend(value for value, _ in numbers_in_text(obj))
     elif isinstance(obj, dict):
         for v in obj.values():
             _walk(v, out, years)

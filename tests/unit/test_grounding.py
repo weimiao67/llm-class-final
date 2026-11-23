@@ -95,3 +95,14 @@ def test_cross_state_ambiguity_asks_for_the_state():
     assert text.startswith('"Springfield" exists in 13 states (GA, IL,')
     assert "and 1 more" in text and text.endswith("Which state do you mean?")
     assert "County" not in text
+
+
+def test_numbers_in_warning_sentences_are_evidence():
+    evidence = {
+        "summary": {"cities": [{"region_id": "11093", "end_value": 535000.0}]},
+        "warnings": ["Summary shows the 10 largest of 1,003 cities (by Zillow size rank)."],
+    }
+    answer = "Of 1,003 cities, the 10 largest are shown; Denver ends at $535,000."
+    assert unsupported_numbers(answer, evidence) == []
+    # identifiers without spaces are not evidence
+    assert unsupported_numbers("Its value is 11093.", evidence) == ["11093"]

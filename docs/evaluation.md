@@ -9,7 +9,7 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 | Run | Model | Prompt | Decoding | Turn success | Execution accuracy | Report |
 |---|---|---|---|---:|---:|---|
 | v0 | Llama-3.2-3B-Instruct (base) | planner-v1 | greedy, structure-only schema | 31.0% | 16.0% | [`20261122-071857-…`](../evaluation/reports/20261122-071857-llama-3.2-3b-instruct-base/report.md) |
-| v1 | Llama-3.2-3B-Instruct (base) | planner-v2 | greedy, scoped schema + state codes | pending | pending | |
+| v1 | Llama-3.2-3B-Instruct (base) | planner-v2 | greedy, scoped schema + state codes | 37.5% | 27.5% | [`20261123-064147-…`](../evaluation/reports/20261123-064147-llama-3.2-3b-instruct-planner-v2/report.md) |
 
 ## v0: baseline, Llama-3.2-3B-Instruct, planner-v1
 
@@ -40,11 +40,45 @@ plan was rejected, and the relayed error happened to be scored as `unsupported`.
 scores 14/29 on respond-expected cases. A lower score on these families in v1 therefore doesn't by
 itself mean a regression.
 
-## v1 changes (planner-v2), measured next
+## v1: planner-v2 (same model)
 
-- The decoding schema splits the plan into city-scoped and state-scoped variants. The grammar then
+Changes from v0:
+
+- The decoding schema splits the plan into city-scoped and state-scoped variants, so the grammar
   enforces "exactly one" scope, and state fields are limited to the 51 state codes.
 - The retry feedback tells the model to fix the call, or to switch to `respond(unsupported)` when
   the data can't answer the question, and never to relay the error.
 - The prompt states when to use each tool and the scope rule.
-- Results now keep the raw planner outputs, plan, and trace for every case.
+
+| Metric | v0 | v1 |
+|---|---:|---:|
+| Envelope valid (first output) | 53.5% | **79.0%** |
+| Tool selection (first call) | 41.5% | **69.5%** |
+| Response kind | 42.0% | **71.0%** |
+| Plan match | 15.4% | 26.3% |
+| **Execution accuracy** | 16.0% | **27.5%** |
+| Faithful model answer | 90.0% (45/50) | 63.6% (75/118) |
+| Turn success | 31.0% | **37.5%** |
+| Latency p50 / p95 | 1.3 s / 2.5 s | 1.6 s / 3.4 s |
+
+The interface fixes worked: the model now mostly picks the right tool and produces valid calls.
+Methodology reached 100%, extrema 100% tool selection, and aggregate success went from 5% to 40%.
+**Plan content is now the bottleneck.** Of the 77 data questions with a wrong plan (a plan can
+have several problems):
+
+| Problem | Plans | Example |
+|---|---:|---|
+| Scope: a city's state used as `state_filter` | 38 | "Miami, FL" → `state_filter: "FL"` (all Florida cities) |
+| Period: end month invented | 37 | "from 2019 to 2024" → `2019-01` to `2024-10`. The "-10" is copied from the catalog's last month (2026-10). |
+| Operation for "which cities…" questions | 26 | "growth" → `yoy_change`/`change` instead of `rank`; "highest values in Oregon" → `extrema` |
+| `rank_by`: "growth" → `change` instead of `pct_change` | 17 | "Rank Colorado cities by ZHVI growth" |
+
+**Faithfulness** dropped because the model now writes many more answers (118 vs. 50), and because
+of a bug in the check. 70 of the 187 numbers it flagged (37%) come from the result's own warning
+text, which the check didn't count as evidence. That bug is fixed after this run, so v1
+understates faithfulness.
+
+**Caveat on tuning:** v0 → v1 changes were designed from failures on this same eval set. They are
+general (schema shape, retry wording, tool rules), but further prompt iteration against v1 would
+overfit the benchmark. Later prompt work should be tuned on a separate dev set (e.g. held-out
+synthetic data from Step 3), keeping v1 as the final test.
