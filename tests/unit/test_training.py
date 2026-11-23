@@ -2,6 +2,7 @@
 
 import json
 import random
+from pathlib import Path
 
 import pytest
 
@@ -331,3 +332,26 @@ def test_methodology_lead_in_keeps_sentence_case(ctx):
     for _ in range(200):
         q = methodology(rng, ctx, "train").question
         assert ", When " not in q and ", How " not in q and ", Why " not in q
+
+
+def test_no_generator_shape_copies_an_eval_question():
+    """Fixed shapes are written independently of the eval set; a verbatim copy would be filtered
+    out anyway, but it would mean tuning the data on the test questions."""
+    import training.templates as T
+    from evaluation.cases import load_cases
+    from evaluation.holdout import normalize_question
+
+    eval_questions = {
+        normalize_question(c.question)
+        for c in load_cases(Path(__file__).resolve().parents[2] / "evaluation/cases/v1.jsonl")
+    }
+    shapes = []
+    for value in vars(T).values():
+        if isinstance(value, list):
+            for item in value:
+                text = item[0] if isinstance(item, tuple) else item
+                if isinstance(text, str):
+                    shapes.append(text)
+    shapes += [s for _, topic_shapes in T.METHODOLOGY_TOPICS for s in topic_shapes]
+    literal = [s for s in shapes if "{" not in s]
+    assert literal and not [s for s in literal if normalize_question(s) in eval_questions]

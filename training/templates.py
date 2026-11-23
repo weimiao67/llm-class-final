@@ -585,8 +585,8 @@ REFUSAL_TEXT = {
     "missing": [
         "The database has no {field} data. It covers ZHVI home values and ZORI rents by city and "
         "month, so I can show those instead.",
-        "{field_cap} isn't in this dataset, which only has home value (ZHVI) and rent (ZORI) "
-        "indices by city and month.",
+        "There is no {field} data in this dataset, which only has home value (ZHVI) and rent "
+        "(ZORI) indices by city and month.",
         "I can't answer that: there is no {field} field. I can show home values or rents for the "
         "same place instead.",
     ],
@@ -662,7 +662,7 @@ def refusal_builder(tid: str, kind: str):
                 slots["period"] = period(rng, ctx, metric, ("year", "since")).phrase
             answer = respond(
                 "unsupported",
-                refusal_text(rng, "missing", field=label, field_cap=label[:1].upper() + label[1:]),
+                refusal_text(rng, "missing", field=label),
             )
         elif kind == "op":
             shapes = [s for s, _, _ in UNSUPPORTED_OPS]
@@ -769,7 +769,7 @@ FOLLOW_RANK = [("Show the bottom {n} instead.", {"order": "asc", "limit": "n"}),
                ("Now rank by dollar change.", {"rank_by": "change"}),
                ("And in percent terms?", {"rank_by": "pct_change"}),
                ("Flip the order.", {"order": "flip"}),
-               ("What's the median instead?",
+               ("Give me the median of those cities instead.",
                 {"operation": "aggregate", "aggregate": "median", "rank_by": None}),
                ("And the average across those cities?",
                 {"operation": "aggregate", "aggregate": "avg", "rank_by": None}),
@@ -779,7 +779,7 @@ FOLLOW_RANK = [("Show the bottom {n} instead.", {"order": "asc", "limit": "n"}),
                 {"operation": "aggregate", "aggregate": "avg", "rank_by": None}),
                ("Just the top {n}, please.", {"limit": "n"})]  # fmt: skip
 FOLLOW_FORECAST = [
-    "Will that keep going next year?",
+    "Is that trend likely to continue?",
     "So what happens next?",
     "Predict where it goes from here.",
     "Is it going to keep rising?",
