@@ -220,3 +220,32 @@ def test_data_version_tracks_prompt_and_schema_sources():
     names = {p.name for p in VERSIONED_SOURCES}
     assert {"prompts.py", "schemas.py", "templates.py", "build.py"} <= names
     assert all(p.exists() for p in VERSIONED_SOURCES)
+
+
+class _FakeDB:
+    """Just what Pools reads: regions (in a given order) and size ranks that all tie."""
+
+    def __init__(self, regions):
+        self.regions = regions
+
+    def query(self, sql, params):
+        return [{"region_id": rid, "sr": 7} for rid in self.regions]
+
+
+def test_pools_do_not_depend_on_database_row_order():
+    """Regression: DuckDB's GROUP BY order differs between runs, and most real regions share a
+    size rank, so builds on different machines (or processes) produced different data."""
+    from housing.db import Region
+
+    regions = {
+        str(i): Region(str(i), f"Town{i}", "CO", "X County", frozenset({"zhvi"})) for i in range(12)
+    }
+    forward = Pools(_FakeDB(regions), set(), min_state_cities=2)
+    backward = Pools(_FakeDB(dict(reversed(list(regions.items())))), set(), min_state_cities=2)
+    assert [c.region_id for c in forward.in_state["zhvi"]] == [
+        c.region_id for c in backward.in_state["zhvi"]
+    ]
+    rng_a, rng_b = random.Random(5), random.Random(5)
+    assert [forward.city(rng_a, "zhvi").name for _ in range(10)] == [
+        backward.city(rng_b, "zhvi").name for _ in range(10)
+    ]

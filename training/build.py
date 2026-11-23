@@ -292,6 +292,10 @@ def write_outputs(built: list[Built], meta: dict[str, Any], data_dir: Path, repo
                 if b.record["split"] == split:
                     fh.write(json.dumps(b.record, ensure_ascii=False) + "\n")
     s = stats(built, meta["rejected_counter"])
+    s["sha256"] = {
+        name: hashlib.sha256((data_dir / name).read_bytes()).hexdigest()
+        for name in ("train.jsonl", "dev.jsonl")
+    }
     meta = {k: v for k, v in meta.items() if k != "rejected_counter"}
     (data_dir / "manifest.json").write_text(json.dumps({**meta, **s}, indent=2) + "\n")
     (report_dir / "stats.json").write_text(json.dumps({**meta, **s}, indent=2) + "\n")

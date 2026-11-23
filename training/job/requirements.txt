@@ -1,0 +1,6 @@
+# Installed by the SageMaker Hugging Face training container before train.py runs.
+# Same pins as assignment A6, where this recipe trained successfully.
+trl==1.16.0
+peft==0.21.2
+transformers==4.57.6
+datasets==5.0.1

@@ -58,7 +58,7 @@ class HousingDB:
             m: Coverage(m, first, last, n_regions, n_obs)
             for m, first, last, n_regions, n_obs in self._con.execute(
                 """SELECT metric, min(month), max(month), count(DISTINCT region_id), count(*)
-                   FROM observations GROUP BY metric"""
+                   FROM observations GROUP BY metric ORDER BY metric"""
             ).fetchall()
         }
         self.regions: dict[str, Region] = {
@@ -66,7 +66,7 @@ class HousingDB:
             for rid, city, state, county, metrics in self._con.execute(
                 """SELECT region_id, any_value(city), any_value(state), any_value(county),
                           list(DISTINCT metric)
-                   FROM observations GROUP BY region_id"""
+                   FROM observations GROUP BY region_id ORDER BY region_id"""
             ).fetchall()
         }
 

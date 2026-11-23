@@ -56,10 +56,15 @@ class Pools:
                 "SELECT region_id, min(size_rank) AS sr FROM observations GROUP BY region_id", []
             )
         }
-        everything = [
-            City(r.region_id, r.city, r.state, r.county, ranks[r.region_id], r.metrics)
-            for r in db.regions.values()
-        ]
+        # Sorted, so nothing depends on the order DuckDB returns rows in (GROUP BY without ORDER BY
+        # differs between runs, and most regions share a size rank with another region).
+        everything = sorted(
+            (
+                City(r.region_id, r.city, r.state, r.county, ranks[r.region_id], r.metrics)
+                for r in db.regions.values()
+            ),
+            key=lambda c: (c.size_rank, c.region_id),
+        )
         states_of: dict[str, set[str]] = defaultdict(set)
         per_state_count: dict[tuple[str, str], int] = defaultdict(int)
         for c in everything:
@@ -75,7 +80,7 @@ class Pools:
             ok = sorted(
                 (c for c in allowed if metric in c.metrics
                  and per_state_count[(c.name.lower(), c.state)] == 1),
-                key=lambda c: c.size_rank,
+                key=lambda c: (c.size_rank, c.region_id),  # total order: ties are common
             )  # fmt: skip
             self.in_state[metric] = ok
             self.bare[metric] = [c for c in ok if len(states_of[c.name.lower()]) == 1]

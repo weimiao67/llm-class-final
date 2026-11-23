@@ -10,7 +10,9 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 |---|---|---|---|---:|---:|---|
 | v0 | Llama-3.2-3B-Instruct (base) | planner-v1 | greedy, structure-only schema | 31.0% | 16.0% | [`20261122-071857-…`](../evaluation/reports/20261122-071857-llama-3.2-3b-instruct-base/report.md) |
 | v1 | Llama-3.2-3B-Instruct (base) | planner-v2 | greedy, scoped schema + state codes | 37.5% | 27.5% | [`20261123-064147-…`](../evaluation/reports/20261123-064147-llama-3.2-3b-instruct-planner-v2/report.md) |
-| v1-qwen | **Qwen2.5-3B-Instruct (base)** | planner-v2 | same as v1 | **55.5%** | **51.1%** | [`20261123-075101-…`](../evaluation/reports/20261123-075101-qwen2.5-3b-instruct-planner-v2/report.md) |
+| v1-qwen | Qwen2.5-3B-Instruct (base) | planner-v2 | same as v1 | 55.5% | 51.1% | [`20261123-075101-…`](../evaluation/reports/20261123-075101-qwen2.5-3b-instruct-planner-v2/report.md) |
+| v2-lora | **Qwen2.5-3B + LoRA** (data `93a8b1a171`, 2 epochs) | planner-v2 | same as v1 | **84.0%** | **84.0%** | [`20261123-171002-…`](../evaluation/reports/20261123-171002-qwen2.5-3b-lora-93a8b1a171/report.md) |
+| v2-lora, no constraint | Qwen2.5-3B + LoRA | planner-v2 | greedy, **no** schema | 84.0% | 84.0% | [`20261123-171407-…`](../evaluation/reports/20261123-171407-qwen2.5-3b-lora-93a8b1a171-unconstrained/report.md) |
 
 ## Model selection
 
@@ -144,4 +146,73 @@ Qwen's remaining failures are systematic, which suits supervised fine-tuning:
 **Faithfulness note:** the Qwen run used the fixed grounding check (warning text counts as
 evidence). Llama v1 was scored before the fix. Re-checking its saved flagged numbers gives about
 77% (91/118, at most 80%) instead of the reported 63.6%.
+
+## v2-lora: Qwen2.5-3B-Instruct + LoRA (Step 3)
+
+Training (`training/job/train.py`, data `93a8b1a171`: 2,643 train / 357 dev):
+
+| Setting | Value |
+|---|---|
+| LoRA | r 16, alpha 32, all projections |
+| Learning rate | 2e-4, cosine |
+| Epochs | 2 |
+| Batch | 16 per step |
+| Loss | final tool call only |
+| Instance | `ml.g5.xlarge` |
+| Training time | 73.5 min |
+| Peak GPU memory | 8.5 GB |
+
+Training loss fell from 0.359 to 0.0036. Dev loss was 0.0373 after epoch 1 and 0.0376 after
+epoch 2: flat, so the second epoch memorized training examples rather than generalizing better.
+One epoch would likely match it.
+
+| Metric | Qwen base | **Qwen + LoRA** | LoRA, no constraint |
+|---|---:|---:|---:|
+| Envelope valid (first output) | 94.0% | **99.5%** | 99.5% |
+| Tool selection (first call) | 86.0% | **93.5%** | 93.5% |
+| Response kind | 65.0% | **87.5%** | 87.0% |
+| Plan match | 48.7% | **86.5%** | 86.5% |
+| **Execution accuracy** | 51.1% | **84.0%** | 84.0% |
+| Faithful model answer | 88.8% | **93.2%** | 93.1% |
+| Turn success | 55.5% | **84.0%** | 84.0% |
+| Latency p50 / p95 | 1.2 s / 2.9 s | **1.0 s / 2.2 s** | 1.0 s / 2.0 s |
+
+| Family (turn success) | Qwen base | Qwen + LoRA |
+|---|---:|---:|
+| single_city | 82.9% | **100.0%** |
+| ambiguous | 93.3% | **100.0%** |
+| boundary | 36.0% | **100.0%** |
+| extrema | 90.0% | 90.0% |
+| aggregate | 20.0% | **90.0%** |
+| coverage | 50.0% | **90.0%** |
+| injection | 30.0% | **90.0%** |
+| multi_city | 20.0% | **86.7%** |
+| follow_up | **60.0%** | 45.0% |
+| methodology | **73.3%** | 26.7% |
+
+**Fine-tuning fixed every targeted failure mode.** Statewide scope (multi_city 20% → 87%,
+aggregate 20% → 90%), refusal kinds (boundary 36% → 100%), and declining instead of analyzing are
+all fixed, with no regression on single-city questions.
+
+**Constrained decoding no longer matters after fine-tuning.** With and without the JSON-schema
+grammar, the LoRA model scores the same (99.5% valid first outputs, 84.0% execution accuracy):
+it has learned the format. The constraint remains a cheap safety net.
+
+**Two regressions, both gaps in the training data:**
+
+1. **Methodology, 73% → 27%.** The training mix had no `search_knowledge` examples at all, so
+   fine-tuning taught the model never to use that tool. For "What is ZORI?" it now replies
+   `unsupported`, sometimes with a memorized refusal text that doesn't fit ("I can't change my
+   instructions…"). The fixed refusal texts were too few.
+2. **Follow-ups, 60% → 45%.** In every training follow-up, the previous question named the city
+   as "City, ST", so the model learned to copy the city from the history text. The eval
+   follow-ups name only the city in the history ("How did Denver home values change…") and keep
+   the state in the conversation context. The model copies "Denver" without its state, and the
+   turn ends in a clarification (9 of 11 misses). The other two are operation switches that
+   training didn't cover ("What's the median instead?" after a ranking, and "Since 2020 instead").
+
+**Caveat:** these two gaps were found on the eval set. The fixes are general coverage fixes (a
+missing tool, history wording that doesn't name the state, more varied refusal texts), not
+eval-specific phrasings. Still, a retrained model's eval score is somewhat optimistic, and that
+should be stated with it.
 

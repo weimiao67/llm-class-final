@@ -48,6 +48,7 @@ def main() -> int:
     print(f"{s['examples']} examples → {args.out / version}")
     print("splits:", s["counts"]["split"], "| scenarios:", s["counts"]["scenario"])
     print("rejected:", s["rejected"])
+    print("sha256:", {k: v[:16] for k, v in s["sha256"].items()})
     out = args.reports / version
     print(f"report: {out}/report.md, samples: {out}/samples.md")
     return 0
