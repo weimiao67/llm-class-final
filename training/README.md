@@ -56,3 +56,6 @@ uv run python scripts/build_training_data.py          # 3,000 examples, seed 13 
 
 The version is a hash of the seed, size, dataset version, prompt version, and generator code, so
 the same inputs always give the same dataset.
+
+Training itself (Step 3b) runs `training/job/train.py` as a SageMaker job; see
+[docs/training.md](../docs/training.md).

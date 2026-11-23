@@ -65,6 +65,8 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `docs/evaluation.md` | Evaluation results so far (baseline v0, the next runs) |
 | `training/` | Step 3 planner training data: phrase grammar, filters, train/dev split — see [training/README.md](training/README.md) |
 | `scripts/build_training_data.py` | Build the training data and its report |
+| `training/job/train.py` | SageMaker training job: LoRA on Qwen2.5-3B, completion-only loss, in-job merge |
+| `scripts/launch_train.py` | Launch the training job from Studio — see [docs/training.md](docs/training.md) |
 
 ## Example
 
