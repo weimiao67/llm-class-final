@@ -220,7 +220,7 @@ def test_app_answers_a_question_and_carries_state_into_the_follow_up(app_against
     assert labels[1].startswith("Queried data · ") and labels[1].endswith(" rows")
     assert at.session_state.state["state_filter"] == "CO"
 
-    at.sidebar.chat_input[0].set_value("What about rent?").run()
+    at.sidebar.chat_input[0].set_value("What about rent growth for the same cities and year?").run()
     assert not at.exception
     assert len(at.session_state.turns) == 2
     assert at.session_state.state["metric"] == "zori"

@@ -310,3 +310,22 @@ The corrections don't just favor the fine-tuned models: base Qwen loses a point,
 and Salt Lake City", where the state sits mid-list) is left unchanged, since reading it is
 genuinely ambiguous.
 
+
+## Found in the live demo (Step 4c)
+
+Running the demo script through the deployed app (EC2 + the data-v2 endpoint) turned up one miss
+the eval set doesn't cover: switching the metric right after a **state ranking**.
+
+| Conversation (data-v2 LoRA, live) | Result |
+|---|---|
+| "Rank Colorado cities by ZHVI growth in 2025" → "What about rent?" | `respond: unsupported` ("I can't change the analysis") instead of the ZORI ranking |
+| same ranking → "What about rent growth for the same cities and year?" | correct ZORI ranking (52 cities) |
+| "What was Mead, CO's highest ZHVI month in 2025?" → "What about rent there?" | correct plan; Mead has no ZORI data, so it reports that |
+
+Why: of the 654 multi-turn training examples in data v2, only 4 switch the metric, and all four
+follow a single-city question; the 122 follow-ups on state rankings all keep the metric. The eval
+set has the same blind spot: both of its "rent" follow-ups (`follow_up-001`, `follow_up-020`)
+follow a single-city question, so the 85% follow-up score doesn't measure this case.
+
+The demo uses the explicit phrasing. Fixing the model would need metric-switch follow-ups after
+rankings and aggregates in the training data, with new eval cases for them (v1 stays frozen).
