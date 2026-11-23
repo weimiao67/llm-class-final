@@ -37,7 +37,7 @@ from ui.view import (
 EXAMPLES = [
     "What was Mead, CO's highest ZHVI month in 2025?",
     "Rank Colorado cities by ZHVI growth in 2025",
-    "What about rent?",
+    "What about rent growth for the same cities and year?",
     "How did home values change in Oakwood, OH since 2020?",
     "What will Denver rent be next year?",
     "What is ZORI and how is it smoothed?",
