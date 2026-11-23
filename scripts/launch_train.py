@@ -8,8 +8,8 @@ channel. When the job ends, SageMaker uploads:
   * output.tar.gz: training_metrics.json and the LoRA adapter (small)
 
 Usage, from the repo root:
-    python scripts/launch_train.py --data-dir data/training/93a8b1a171 --smoke   # 15-25 min check
-    python scripts/launch_train.py --data-dir data/training/93a8b1a171           # full run
+    python scripts/launch_train.py --data-dir data/training/92c8935c7d --smoke   # 15-25 min check
+    python scripts/launch_train.py --data-dir data/training/92c8935c7d           # full run
     python scripts/launch_train.py --data-dir ... --epochs 3 --name ep3          # a variant
 
 Training bills by the second while the job runs (ml.g5.xlarge is about $1.4/h).

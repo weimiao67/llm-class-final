@@ -23,9 +23,9 @@ cd ~/llm-class-final && git pull
 uv run python scripts/build_training_data.py
 ```
 
-It should print `3000 examples → data/training/93a8b1a171`, the version whose report is committed
-in `training/reports/93a8b1a171/`. The build is deterministic. It should also print
-`sha256: {'train.jsonl': '5ce24a52101af8da', 'dev.jsonl': '8f33f206d7018590'}`, the checksums of the
+It should print `3000 examples → data/training/92c8935c7d`, the version whose report is committed
+in `training/reports/92c8935c7d/`. The build is deterministic. It should also print
+`sha256: {'train.jsonl': '7b8c663e2df2dfc1', 'dev.jsonl': 'ebd5df1e8b5f25c2'}`, the checksums of the
 reviewed build. A different version or checksum means the code or dataset differs from the reviewed
 one; stop and check before training.
 
@@ -34,7 +34,7 @@ one; stop and check before training.
 `launch_train.py` uses Studio's own `python`, because it needs the `sagemaker` SDK:
 
 ```bash
-python scripts/launch_train.py --data-dir data/training/93a8b1a171 --smoke
+python scripts/launch_train.py --data-dir data/training/92c8935c7d --smoke
 ```
 
 It trains on 32 rows for 1 epoch, then still merges and uploads the full 3B model (about 6 GB).
@@ -58,7 +58,7 @@ python scripts/deploy_endpoint.py --delete --name final-wm-qwen-lora-smoke
 ## 3. Full training run (about 50–60 minutes)
 
 ```bash
-python scripts/launch_train.py --data-dir data/training/93a8b1a171
+python scripts/launch_train.py --data-dir data/training/92c8935c7d
 ```
 
 Defaults (in `training/job/train.py`):
@@ -98,9 +98,9 @@ python scripts/deploy_endpoint.py --name final-wm-qwen-lora \
   --model-data s3://…/output/model.tar.gz --fallback-instance-types ml.g6.2xlarge ml.g6e.xlarge
 uv run python scripts/smoke_endpoint.py --endpoint final-wm-qwen-lora              # first request
 uv run python scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora \
-  --model-id qwen2.5-3b-lora-93a8b1a171
+  --model-id qwen2.5-3b-lora-92c8935c7d
 uv run python scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora \
-  --model-id qwen2.5-3b-lora-93a8b1a171 --unconstrained                              # ablation
+  --model-id qwen2.5-3b-lora-92c8935c7d --unconstrained                              # ablation
 python scripts/deploy_endpoint.py --delete --name final-wm-qwen-lora
 ```
 
