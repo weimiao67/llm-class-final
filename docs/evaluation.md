@@ -10,6 +10,7 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 |---|---|---|---|---:|---:|---|
 | v0 | Llama-3.2-3B-Instruct (base) | planner-v1 | greedy, structure-only schema | 31.0% | 16.0% | [`20261122-071857-…`](../evaluation/reports/20261122-071857-llama-3.2-3b-instruct-base/report.md) |
 | v1 | Llama-3.2-3B-Instruct (base) | planner-v2 | greedy, scoped schema + state codes | 37.5% | 27.5% | [`20261123-064147-…`](../evaluation/reports/20261123-064147-llama-3.2-3b-instruct-planner-v2/report.md) |
+| v1-qwen | **Qwen2.5-3B-Instruct (base)** | planner-v2 | same as v1 | **55.5%** | **51.1%** | [`20261123-075101-…`](../evaluation/reports/20261123-075101-qwen2.5-3b-instruct-planner-v2/report.md) |
 
 ## Model selection
 
@@ -19,7 +20,7 @@ The design (§9.1) compares two model families before fine-tuning one.
 |---|---|
 | `meta-llama/Llama-3.2-3B-Instruct` | Runs on TGI 3.3.6; runs v0 and v1 below |
 | `microsoft/Phi-4-mini-instruct` (3.8B) | **Not servable on TGI 3.3.6.** The shard fails at startup with `size of tensor a (48) must match the size of tensor b (64)`. Phi-4-mini applies rotary position embeddings to only 75% of each 128-dimension head (`partial_rotary_factor: 0.75`, so 48 frequency pairs), but TGI's Phi-3 code assumes the full head (64 pairs). Serving it would need the vLLM-based LMI container, a separate deploy path and client, so it was dropped. |
-| `Qwen/Qwen2.5-3B-Instruct` | Second family instead: same size as Llama-3.2-3B, standard `Qwen2ForCausalLM` architecture, not gated. Released under the Qwen Research License (fine for coursework). Run pending. |
+| `Qwen/Qwen2.5-3B-Instruct` | Second family instead: same size as Llama-3.2-3B, standard `Qwen2ForCausalLM` architecture, not gated. Released under the Qwen Research License (fine for coursework). **Selected for fine-tuning** (see v1-qwen below). |
 
 ## v0: baseline, Llama-3.2-3B-Instruct, planner-v1
 
@@ -92,3 +93,55 @@ understates faithfulness.
 general (schema shape, retry wording, tool rules), but further prompt iteration against v1 would
 overfit the benchmark. Later prompt work should be tuned on a separate dev set (e.g. held-out
 synthetic data from Step 3), keeping v1 as the final test.
+
+## v1-qwen: Qwen2.5-3B-Instruct, planner-v2 (model-family comparison)
+
+Same prompt, schema, and eval as Llama v1, with no Qwen-specific tuning.
+
+| Metric | Llama v1 | Qwen v1 |
+|---|---:|---:|
+| Envelope valid (first output) | 79.0% | **94.0%** |
+| Tool selection (first call) | 69.5% | **86.0%** |
+| Response kind | **71.0%** | 65.0% |
+| Plan match | 26.3% | **48.7%** |
+| **Execution accuracy** | 27.5% | **51.1%** |
+| Faithful model answer | ~77% (estimated, see below) | **88.8%** |
+| Turn success | 37.5% | **55.5%** |
+| Latency p50 / p95 | 1.6 s / 3.4 s | **1.2 s / 2.9 s** |
+| Mean model calls per turn | 2.23 | **1.6** |
+
+| Family (turn success) | Llama v1 | Qwen v1 |
+|---|---:|---:|
+| single_city | 17.1% | **82.9%** |
+| extrema | 20.0% | **90.0%** |
+| ambiguous | 40.0% | **93.3%** |
+| follow_up | 50.0% | **60.0%** |
+| coverage | 20.0% | **50.0%** |
+| aggregate | **40.0%** | 20.0% |
+| multi_city | **23.3%** | 20.0% |
+| boundary | **56.0%** | 36.0% |
+| injection | 30.0% | 30.0% |
+| methodology | **100.0%** | 73.3% |
+
+**Decision: fine-tune Qwen2.5-3B-Instruct in Step 3.** The 23.6-point execution-accuracy gap is
+well outside the noise (about ±8 points at 95% confidence with 131 scored cases), and Qwen is also
+faster and needs fewer model calls. Its LoRA target modules use the same names as Llama's
+(`q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj`), so the A5/A6
+training recipe carries over.
+
+Qwen's remaining failures are systematic, which suits supervised fine-tuning:
+
+1. **City lists instead of the state filter.** For "Rank Colorado cities…" it lists cities from its
+   own knowledge without states (`Denver, Colorado Springs, Aurora`) instead of setting
+   `state_filter: "CO"`. Each bare name is ambiguous, so the turn ends in a clarification (23 of the
+   multi-city and aggregate failures). It also drops a state written after a list, over-applying
+   the "never add a state" rule.
+2. **Refusal kind.** Missing fields (mortgage rates, home sales) get `out_of_scope` instead of
+   `unsupported`. The refusal is still right; only the label is wrong.
+3. **Analyzing instead of declining.** "Should I buy a house in Miami?" and "Cluster California
+   cities" go to `analyze` and then stop at the ambiguous-city check.
+
+**Faithfulness note:** the Qwen run used the fixed grounding check (warning text counts as
+evidence). Llama v1 was scored before the fix. Re-checking its saved flagged numbers gives about
+77% (91/118, at most 80%) instead of the reported 63.6%.
+
