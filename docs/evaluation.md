@@ -11,6 +11,16 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 | v0 | Llama-3.2-3B-Instruct (base) | planner-v1 | greedy, structure-only schema | 31.0% | 16.0% | [`20261122-071857-…`](../evaluation/reports/20261122-071857-llama-3.2-3b-instruct-base/report.md) |
 | v1 | Llama-3.2-3B-Instruct (base) | planner-v2 | greedy, scoped schema + state codes | 37.5% | 27.5% | [`20261123-064147-…`](../evaluation/reports/20261123-064147-llama-3.2-3b-instruct-planner-v2/report.md) |
 
+## Model selection
+
+The design (§9.1) compares two model families before fine-tuning one.
+
+| Candidate | Result |
+|---|---|
+| `meta-llama/Llama-3.2-3B-Instruct` | Runs on TGI 3.3.6; runs v0 and v1 below |
+| `microsoft/Phi-4-mini-instruct` (3.8B) | **Not servable on TGI 3.3.6.** The shard fails at startup with `size of tensor a (48) must match the size of tensor b (64)`. Phi-4-mini applies rotary position embeddings to only 75% of each 128-dimension head (`partial_rotary_factor: 0.75`, so 48 frequency pairs), but TGI's Phi-3 code assumes the full head (64 pairs). Serving it would need the vLLM-based LMI container, a separate deploy path and client, so it was dropped. |
+| `Qwen/Qwen2.5-3B-Instruct` | Second family instead: same size as Llama-3.2-3B, standard `Qwen2ForCausalLM` architecture, not gated. Released under the Qwen Research License (fine for coursework). Run pending. |
+
 ## v0: baseline, Llama-3.2-3B-Instruct, planner-v1
 
 | Metric | Result |
