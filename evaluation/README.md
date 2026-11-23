@@ -73,13 +73,15 @@ from `analyze` lists the real candidates ("Atlanta exists in 10 states: GA, ID, 
 asks "which city?" whenever it is unsure therefore scores well on these cases, which is why the
 report shows "Clarification via analyze" next to them.
 
-Methodology cases count on tool selection until the knowledge base exists (Step 4).
+Methodology cases are scored on tool selection alone unless the run uses `--knowledge`, which
+loads `rag/corpus` so `search_knowledge` returns passages and the turn ends in an answer.
 
 ## Run
 
 ```bash
 uv run python scripts/run_eval.py --model oracle   # must score 100%; checks the set itself
 uv run python scripts/run_eval.py --model stub     # offline baseline
+uv run python scripts/run_eval.py --model oracle --knowledge   # with the methodology corpus
 uv run python scripts/run_eval.py --model sagemaker --endpoint <name> --model-id <label>
 ```
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import time
 from typing import Any, Literal
 
@@ -275,7 +276,7 @@ class Agent:
         evidence = {
             "passages": [p.model_dump(include={"title", "section", "text"}) for p in passages]
         }
-        fallback = f'From "{passages[0].title}": {passages[0].text[:400]}'
+        fallback = f'From "{passages[0].title}": {first_sentences(passages[0].text)}'
         text, source = self._write_answer(turn, question, evidence, fallback)
         return self._response(turn, "answer", text, source, sources=passages, state=state)
 
@@ -362,6 +363,26 @@ class Agent:
             dataset_version=self.db.dataset_version,
             latency_ms=turn.latency(),
         )
+
+
+FALLBACK_PASSAGE_CHARS = 400
+
+
+def first_sentences(text: str, limit: int = FALLBACK_PASSAGE_CHARS) -> str:
+    """Whole sentences from the start of ``text`` up to ``limit`` characters (at least one).
+
+    Used for the template answer to a methodology question, which quoted a fixed slice before
+    and could end mid-word.
+    """
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    out = sentences[0]
+    for sentence in sentences[1:]:
+        if len(out) + 1 + len(sentence) > limit:
+            break
+        out = f"{out} {sentence}"
+    if len(out) > limit:  # a single very long first sentence
+        out = out[:limit].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return out
 
 
 def _state_from(vplan: ValidatedPlan) -> dict[str, Any]:

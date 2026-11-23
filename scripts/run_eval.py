@@ -24,6 +24,7 @@ from evaluation.cases import load_cases
 from evaluation.oracle import OracleModelClient
 from evaluation.runner import run_eval, write_report
 from housing.db import HousingDB
+from tools.knowledge import BM25KnowledgeBase
 
 DEFAULT_CASES = Path("evaluation/cases/v1.jsonl")
 
@@ -44,6 +45,14 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, default=Path("evaluation/reports"))
     parser.add_argument("--family", action="append", help="only run these families")
     parser.add_argument("--limit", type=int, help="only run the first N cases (smoke test)")
+    parser.add_argument(
+        "--knowledge",
+        type=Path,
+        nargs="?",
+        const=Path("rag/corpus"),
+        help="answer methodology questions from this corpus (default rag/corpus); without it "
+        "they're scored on choosing search_knowledge only",
+    )
     parser.add_argument(
         "--unconstrained",
         action="store_true",
@@ -76,7 +85,10 @@ def main() -> int:
         print(f"[{i:3d}/{n}] {mark} {r.id:<16} {r.latency_ms:8.0f} ms  {r.question[:60]}")
 
     constrained = not args.unconstrained
-    results = run_eval(cases, db, factory, progress=progress, constrained=constrained)
+    knowledge = BM25KnowledgeBase.from_dir(args.knowledge) if args.knowledge else None
+    results = run_eval(
+        cases, db, factory, knowledge=knowledge, progress=progress, constrained=constrained
+    )
     label = model_id if constrained else f"{model_id}-unconstrained"
     run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{safe_name(label)}"
     report = write_report(
@@ -85,7 +97,7 @@ def main() -> int:
         model_id=model_id,
         db=db,
         cases_file=str(args.cases),
-        knowledge_base=False,
+        knowledge_base=knowledge is not None,
         constrained=constrained,
     )
     o = report["overall"]

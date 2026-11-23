@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from agent.model_clients.stub import StubModelClient, demo_rules
 from agent.orchestrator import Agent
 from housing.db import HousingDB
+from tools.knowledge import BM25KnowledgeBase
 from tools.operations import OPERATIONS
 from tools.schemas import TOOL_PROTOCOL_VERSION, ConversationState
 
@@ -56,7 +57,17 @@ def build_agent_from_env() -> Agent:
         )
     else:
         raise ValueError(f"MODEL_BACKEND must be 'stub' or 'sagemaker', got {backend!r}")
-    return Agent(db, model)
+    return Agent(db, model, knowledge=knowledge_from_env())
+
+
+def knowledge_from_env() -> BM25KnowledgeBase | None:
+    """RAG_BACKEND=bm25 (default) loads rag/corpus; RAG_BACKEND=none disables search_knowledge."""
+    backend = os.environ.get("RAG_BACKEND", "bm25")
+    if backend == "none":
+        return None
+    if backend != "bm25":
+        raise ValueError(f"RAG_BACKEND must be 'bm25' or 'none', got {backend!r}")
+    return BM25KnowledgeBase.from_dir(os.environ.get("RAG_CORPUS_DIR", "rag/corpus"))
 
 
 # Dependencies live at module level: with postponed annotations, FastAPI resolves
@@ -129,6 +140,17 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
             },
             "operations": sorted(OPERATIONS),
             "sources": db.source_files(),
+            "knowledge": None
+            if agent.knowledge is None
+            else {
+                "version": getattr(agent.knowledge, "version", None),
+                "documents": sorted(
+                    {
+                        (c.doc_id, c.title, c.source_url)
+                        for c in getattr(agent.knowledge, "chunks", [])
+                    }  # fmt: skip
+                ),
+            },
         }
 
     @app.post("/v1/ask", dependencies=[Depends(require_key)])
