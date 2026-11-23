@@ -634,7 +634,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.command in ("up", "allow") and not args.allow_cidr:
-        parser.error(f"{args.command} needs --allow-cidr <your-ip>/32 (see `curl -s https://checkip.amazonaws.com`)")
+        parser.error(
+            f"{args.command} needs --allow-cidr <your-ip>/32 "
+            "(find it with `curl -s https://checkip.amazonaws.com`)"
+        )
     try:
         if args.allow_cidr:
             check_cidr(args.allow_cidr)
