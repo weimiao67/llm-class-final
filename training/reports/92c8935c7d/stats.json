@@ -1,0 +1,120 @@
+{
+  "data_version": "92c8935c7d",
+  "seed": 13,
+  "requested": 3000,
+  "dataset_version": "23ccd46a4560",
+  "prompt_version": "planner-v2",
+  "holdout_file": "evaluation/cases/v1_holdout.json",
+  "examples": 3000,
+  "rejected": {
+    "outcome_no_rows": 150,
+    "near_duplicate_of_eval": 78,
+    "holdout_question": 47,
+    "duplicate": 33,
+    "builder_skip": 28,
+    "outcome_no_data": 17,
+    "holdout_plan": 8
+  },
+  "counts": {
+    "scenario": {
+      "standard": 690,
+      "scope": 570,
+      "follow_up": 480,
+      "clarify": 420,
+      "refusal": 420,
+      "retry": 240,
+      "methodology": 180
+    },
+    "template": {
+      "methodology.search": 180,
+      "std.yoy_change": 126,
+      "std.coverage": 125,
+      "std.change": 119,
+      "std.extrema": 118,
+      "clarify.multi_state": 110,
+      "clarify.fictional": 110,
+      "clarify.ambiguous_in_state": 109,
+      "std.series": 105,
+      "std.yoy_asof": 97,
+      "clarify.typo": 91,
+      "follow.add": 82,
+      "follow.op": 81,
+      "scope.rank_decline": 74,
+      "scope.rank_dollar": 74,
+      "scope.state_aggregate": 73,
+      "scope.state_count": 73,
+      "follow.period": 72,
+      "scope.rank_growth": 71,
+      "scope.rank_value": 69,
+      "scope.list_trailing": 68,
+      "scope.list_mixed": 68,
+      "follow.swap": 68,
+      "follow.forecast": 61,
+      "follow.metric": 60,
+      "refusal.missing": 56,
+      "follow.rank": 56,
+      "refusal.forecast": 55,
+      "retry.scope_neither": 54,
+      "refusal.advice": 52,
+      "retry.switch_unsupported": 52,
+      "refusal.injection_with_data": 50,
+      "retry.missing_rank_by": 49,
+      "retry.scope_both": 47,
+      "refusal.modeling": 46,
+      "refusal.sql": 45,
+      "refusal.op": 42,
+      "refusal.injection": 39,
+      "retry.bad_month": 38,
+      "refusal.sql_translate": 35
+    },
+    "split": {
+      "train": 2653,
+      "dev": 347
+    },
+    "expect": {
+      "answer": 1952,
+      "respond": 448,
+      "clarify": 420,
+      "search": 180
+    },
+    "tool": {
+      "analyze": 2372,
+      "respond": 448,
+      "search_knowledge": 180
+    },
+    "operation": {
+      "change": 554,
+      "series": 473,
+      "rank": 434,
+      "yoy_change": 291,
+      "extrema": 260,
+      "aggregate": 216,
+      "coverage": 144
+    },
+    "metric": {
+      "zhvi": 1424,
+      "zori": 948
+    },
+    "scope": {
+      "cities": 1744,
+      "state_filter": 628
+    },
+    "respond_kind": {
+      "unsupported": 234,
+      "out_of_scope": 214,
+      "search_knowledge": 180
+    }
+  },
+  "max_similarity_to_eval": {
+    "p50": 0.275,
+    "p95": 0.5,
+    "max": 0.597,
+    "threshold": 0.6
+  },
+  "distinct_question_share": 0.937,
+  "mean_prompt_chars": 3776,
+  "sha256": {
+    "train.jsonl": "7b8c663e2df2dfc11b0d0a9334fbf61f672239fb44c040979d3619adfc99e48b",
+    "dev.jsonl": "ebd5df1e8b5f25c27deba5ae2dfff29ef31f234ee6119597a46dbce5f919c638"
+  }
+}

@@ -249,3 +249,85 @@ def test_pools_do_not_depend_on_database_row_order():
     assert [forward.city(rng_a, "zhvi").name for _ in range(10)] == [
         backward.city(rng_b, "zhvi").name for _ in range(10)
     ]
+
+
+# ---- data v2 (Step 3c) ------------------------------------------------------------------------
+
+
+def test_methodology_examples_call_search_knowledge(ctx):
+    from training.templates import methodology
+
+    rng = random.Random(4)
+    examples = [methodology(rng, ctx, "train") for _ in range(30)]
+    assert all(e.target["call"]["tool"] == "search_knowledge" for e in examples)
+    assert all(e.expect == "search" and e.scenario == "methodology" for e in examples)
+    assert len({e.target["call"]["query"] for e in examples}) >= 5  # several topics
+
+
+def _draws(builder, ctx, n, seed):
+    """Call a builder n times, skipping draws that hit an empty fixture pool (the generator does
+    the same: the small fixture has no state with two ZORI cities)."""
+    rng, out = random.Random(seed), []
+    for _ in range(n):
+        try:
+            ex = builder(rng, ctx, "train")
+        except IndexError:
+            continue
+        if ex is not None:
+            out.append(ex)
+    return out
+
+
+def test_refusal_texts_vary_within_a_kind(ctx):
+    from training.templates import refusal_builder
+
+    texts = {e.target["call"]["text"] for e in _draws(refusal_builder("r", "forecast"), ctx, 80, 9)}
+    assert len(texts) >= 3
+    assert not any(ch.isdigit() for t in texts for ch in t)  # refusals never state numbers
+
+
+def test_follow_up_history_often_omits_the_state_and_context_the_county(built):
+    _, items = built
+    follows = [
+        b.example
+        for b in items
+        if b.example.scenario == "follow_up" and b.example.state and b.example.state.get("cities")
+    ]
+    assert follows
+    city = lambda e: e.state["cities"][0]  # noqa: E731
+    bare_history = [e for e in follows if f"{city(e)['city']}," not in e.history[0]["content"]]
+    no_county = [e for e in follows if "county" not in city(e)]
+    assert bare_history and no_county
+    for e in follows:  # the gold call still takes each context city's state from the context
+        context = {c["city"]: c["state"] for c in e.state["cities"]}
+        for c in e.target["call"].get("plan", {}).get("cities", []):
+            if c["city"] in context:
+                assert c.get("state") == context[c["city"]]
+
+
+def test_rank_follow_up_can_switch_to_an_aggregate(ctx):
+    from training.templates import follow_builder
+
+    plans = [e.target["call"]["plan"] for e in _draws(follow_builder("rank"), ctx, 300, 0)]
+    assert {"rank", "aggregate"} <= {p["operation"] for p in plans}
+    for p in plans:
+        if p["operation"] == "aggregate":
+            assert "rank_by" not in p and p["aggregate"]
+
+
+@pytest.mark.parametrize("kind", ["year", "range", "since", "month_since", "month_range"])
+def test_only_the_none_kind_gives_an_empty_period(ctx, kind):
+    for seed in range(200):  # includes starts in the last full year
+        p = period(random.Random(seed), ctx, "zhvi", (kind,))
+        assert p.phrase and p.start
+        if p.end:
+            assert p.start < p.end or kind in ("year",)
+
+
+def test_methodology_lead_in_keeps_sentence_case(ctx):
+    from training.templates import methodology
+
+    rng = random.Random(1)
+    for _ in range(200):
+        q = methodology(rng, ctx, "train").question
+        assert ", When " not in q and ", How " not in q and ", Why " not in q
