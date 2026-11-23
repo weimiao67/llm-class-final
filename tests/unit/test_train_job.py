@@ -132,3 +132,29 @@ def test_job_source_dir_is_self_contained():
     assert {"train.py", "requirements.txt"} <= files
     source = (ROOT / launch.SOURCE_DIR / "train.py").read_text()
     assert "from training" not in source and "from agent" not in source
+
+
+# ---- chat template for TGI (PR #5 review) -----------------------------------------------------
+
+
+def test_chat_template_is_embedded_for_tgi(tmp_path):
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps({"eos_token": "<|im_end|>"}))
+    (tmp_path / "chat_template.jinja").write_text(
+        "{% for m in messages %}{{ m.content }}{% endfor %}"
+    )
+    assert train.embed_chat_template(tmp_path)
+    config = json.loads((tmp_path / "tokenizer_config.json").read_text())
+    assert config["chat_template"].startswith("{% for m in messages %}")
+    assert config["eos_token"] == "<|im_end|>"  # other settings untouched
+    assert train.embed_chat_template(tmp_path)  # idempotent
+
+
+def test_existing_template_is_kept_and_missing_one_is_reported(tmp_path):
+    (tmp_path / "tokenizer_config.json").write_text(json.dumps({"chat_template": "keep"}))
+    (tmp_path / "chat_template.jinja").write_text("other")
+    assert train.embed_chat_template(tmp_path)
+    assert json.loads((tmp_path / "tokenizer_config.json").read_text())["chat_template"] == "keep"
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    (bare / "tokenizer_config.json").write_text("{}")
+    assert not train.embed_chat_template(bare)

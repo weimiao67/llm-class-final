@@ -102,6 +102,23 @@ def summarize_run(
     }
 
 
+def embed_chat_template(model_dir: Path) -> bool:
+    """Copy chat_template.jinja into tokenizer_config.json if it isn't there.
+
+    transformers 4.57 saves the chat template only as chat_template.jinja, but TGI's Messages API
+    reads it from tokenizer_config.json (the same fix as A7's merge_adapter.py). Without it the
+    merged model's endpoint can't render chat requests the way training did. Returns whether the
+    config now holds a template.
+    """
+    config_path = model_dir / "tokenizer_config.json"
+    template_path = model_dir / "chat_template.jinja"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    if "chat_template" not in config and template_path.exists():
+        config["chat_template"] = template_path.read_text(encoding="utf-8")
+        config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    return bool(config.get("chat_template"))
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--model-name", default=BASE_MODEL)
@@ -199,6 +216,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
         merged = trainer.model.merge_and_unload()
         merged.save_pretrained(out, safe_serialization=True)
     tokenizer.save_pretrained(out)
+    if not embed_chat_template(out):
+        raise RuntimeError("the saved model has no chat template; TGI couldn't serve it")
     _remove_checkpoints(out / "_checkpoints")
 
     summary = summarize_run(trainer.state.log_history, runtime, peak, manifest, args)
