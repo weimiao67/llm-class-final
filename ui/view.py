@@ -21,7 +21,7 @@ TRACE_CAPTION = "These are the real tool events, not model reasoning."
 MONTH_COLUMNS = {"month", "start_month", "end_month", "prior_month", "first_month",
                  "last_month", "max_month", "min_month"}  # fmt: skip
 VALUE_COLUMNS = {"value", "start_value", "end_value", "prior_value", "max_value", "min_value",
-                 "change", "latest_value"}  # fmt: skip
+                 "latest_value"}  # fmt: skip
 PCT_COLUMNS = {"pct_change"}
 
 
@@ -58,6 +58,22 @@ def city_label(entry: dict[str, Any]) -> str:
     return entry.get("label") or f"{entry['city']}, {entry['state']}"
 
 
+def region_labels(entries: list[dict[str, Any]]) -> dict[str, str]:
+    """region_id -> display label: "City, ST", plus the county when two regions share that name
+    (Oakwood, OH is three places), so they never merge into one line, bar, or card."""
+    names: dict[str, str] = {}
+    for e in entries:
+        names.setdefault(e["region_id"], f"{e['city']}, {e['state']}")
+    counts: dict[str, int] = {}
+    for name in names.values():
+        counts[name] = counts.get(name, 0) + 1
+    by_id = {e["region_id"]: e for e in entries}
+    return {
+        rid: f"{name} ({by_id[rid].get('county') or rid})" if counts[name] > 1 else name
+        for rid, name in names.items()
+    }
+
+
 def metric_cards(artifact: dict[str, Any] | None) -> list[Card]:
     """Headline numbers for up to four cities (or one statewide aggregate); [] otherwise."""
     if not artifact:
@@ -76,11 +92,11 @@ def metric_cards(artifact: dict[str, Any] | None) -> list[Card]:
     cities = summary.get("cities")
     if not cities or len(cities) > MAX_CARDS:
         return []
-    return [_city_card(op, c) for c in cities]
+    labels = region_labels(cities) if all("region_id" in c for c in cities) else {}
+    return [_city_card(op, c, labels.get(c.get("region_id")) or city_label(c)) for c in cities]
 
 
-def _city_card(op: str, c: dict[str, Any]) -> Card:
-    label = city_label(c)
+def _city_card(op: str, c: dict[str, Any], label: str) -> Card:
     if op in ("change", "yoy_change"):
         start = c.get("prior_month") if op == "yoy_change" else c.get("start_month")
         caption = f"{month_label(start)} → {month_label(c.get('end_month'))}"
@@ -133,6 +149,8 @@ def rows_frame(artifact: dict[str, Any] | None) -> pd.DataFrame:
     for col in df.columns:
         if col in MONTH_COLUMNS:
             df[col] = df[col].map(month_label)
+        elif col == "change":
+            df[col] = df[col].map(signed_money)
         elif col in VALUE_COLUMNS:
             df[col] = df[col].map(money)
         elif col in PCT_COLUMNS:
@@ -154,18 +172,22 @@ def figure(artifact: dict[str, Any] | None) -> go.Figure | None:
     metric = METRIC_NAMES.get(artifact["metric"], artifact["metric"])
     fig = go.Figure()
     if hint["type"] == "line":
+        series_col = hint.get("series")
+        labels = region_labels(rows) if series_col == "region_id" else {}
         groups: dict[str, list[dict[str, Any]]] = {}
         for r in rows:
-            key = city_label(r) if hint.get("series") else metric
-            groups.setdefault(key, []).append(r)
-        for name, group in groups.items():
+            groups.setdefault(r[series_col] if series_col else metric, []).append(r)
+        for key, group in groups.items():
+            name = labels.get(key, str(key))
             x, y = _with_gaps(group, hint["x"], hint["y"])
             fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=name, connectgaps=False))
         fig.update_layout(yaxis_title=metric, yaxis_tickprefix="$", yaxis_tickformat=",.0f")
     elif hint["type"] == "bar":
         top = (artifact.get("summary") or {}).get("top") or rows
         y_col = hint["y"]
-        fig.add_trace(go.Bar(x=[city_label(r) for r in top], y=[r[y_col] for r in top]))
+        labels = region_labels(top) if all("region_id" in r for r in top) else {}
+        x = [labels.get(r.get("region_id")) or city_label(r) for r in top]
+        fig.add_trace(go.Bar(x=x, y=[r[y_col] for r in top]))
         if y_col == "pct_change":
             fig.update_layout(yaxis_title=f"{metric}, % change", yaxis_ticksuffix="%")
         else:

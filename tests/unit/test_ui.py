@@ -180,6 +180,7 @@ def test_failed_turns_are_left_out_of_the_history():
 @pytest.fixture
 def app_against_stub_api(db, monkeypatch):
     """The Streamlit app, with its HTTP client pointed at the real API app (stub model)."""
+    import streamlit as st
     from fastapi.testclient import TestClient
     from streamlit.testing.v1 import AppTest
 
@@ -197,9 +198,15 @@ def app_against_stub_api(db, monkeypatch):
             original(self, "http://testserver", api_key, transport=api._transport)
 
         monkeypatch.setattr(AnalystClient, "__init__", init)
+        # Streamlit caches live for the whole process: without clearing them, this test would
+        # reuse the client (and status) cached by an earlier test, bound to that test's API app.
+        st.cache_resource.clear()
+        st.cache_data.clear()
         at = AppTest.from_file("../../ui/app.py", default_timeout=30)
         at.run()
         yield at
+    st.cache_resource.clear()
+    st.cache_data.clear()
 
 
 def test_app_answers_a_question_and_carries_state_into_the_follow_up(app_against_stub_api):
@@ -244,3 +251,52 @@ def test_warnings_are_shown_once_and_rankings_keep_only_ranking_columns():
     assert list(view.ranking_frame(artifact).columns) == [
         "rank", "label", "start_value", "end_value", "change", "pct_change"
     ]  # fmt: skip
+
+
+# ---- PR #8 review follow-ups ---------------------------------------------------------------------
+
+
+def oakwoods():
+    def row(rid, county, value):
+        return {"region_id": rid, "city": "Oakwood", "state": "OH", "county": county,
+                "month": "2025-01-01", "value": value}  # fmt: skip
+
+    return [row("a", "Montgomery County", 300000.0), row("b", "Cuyahoga County", 150000.0)]
+
+
+def test_same_named_cities_get_separate_lines_labeled_by_county():
+    chart = {"type": "line", "x": "month", "y": "value", "series": "region_id"}
+    artifact = {"operation": "series", "metric": "zhvi", "rows": oakwoods(), "summary": {},
+                "chart": chart}  # fmt: skip
+    traces = {t.name: list(t.y) for t in view.figure(artifact).data}
+    assert traces == {
+        "Oakwood, OH (Montgomery County)": [300000.0],
+        "Oakwood, OH (Cuyahoga County)": [150000.0],
+    }
+
+
+def test_same_named_cities_get_distinct_bars_and_cards():
+    top = [{**r, "label": "Oakwood, OH", "pct_change": 1.0} for r in oakwoods()]
+    artifact = {"operation": "rank", "metric": "zhvi", "rows": top, "summary": {"top": top},
+                "chart": {"type": "bar", "x": "label", "y": "pct_change"}}  # fmt: skip
+    (bar,) = view.figure(artifact).data
+    assert len(set(bar.x)) == 2
+    cards = view.metric_cards({"operation": "change", "summary": {"cities": oakwoods()}})
+    assert [c.label for c in cards] == [
+        "Oakwood, OH (Montgomery County)",
+        "Oakwood, OH (Cuyahoga County)",
+    ]
+    assert view.region_labels([{"region_id": "1", "city": "Denver", "state": "CO"}]) == {
+        "1": "Denver, CO"
+    }
+
+
+def test_non_json_responses_become_api_errors():
+    client = client_for(lambda r: httpx.Response(503, text="Service Unavailable"))
+    with pytest.raises(APIError, match="unexpected response"):
+        client.ready()
+
+
+def test_negative_changes_are_signed_in_tables():
+    df = view.rows_frame({"rows": [{"change": -16537.1}, {"change": 250.0}]})
+    assert list(df["change"]) == ["−$16,537", "+$250"]

@@ -61,7 +61,10 @@ class AnalystClient:
         except httpx.HTTPError as exc:
             raise APIError(f"Can't reach the agent API at {self.base_url}.") from exc
         if r.status_code in ok:
-            return r.json()
+            try:
+                return r.json()
+            except ValueError as exc:  # e.g. a proxy's plain-text 503 while the API starts
+                raise APIError("The agent API returned an unexpected response.") from exc
         if r.status_code == 401:
             raise APIError("The agent API rejected the API key (set ANALYST_API_KEY).")
         if r.status_code == 422:
