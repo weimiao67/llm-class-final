@@ -1,5 +1,5 @@
 {
-  "data_version": "076967313a",
+  "data_version": "93a8b1a171",
   "seed": 13,
   "requested": 3000,
   "dataset_version": "23ccd46a4560",
@@ -7,13 +7,13 @@
   "holdout_file": "evaluation/cases/v1_holdout.json",
   "examples": 3000,
   "rejected": {
-    "outcome_no_rows": 138,
+    "outcome_no_rows": 146,
     "near_duplicate_of_eval": 113,
-    "builder_skip": 33,
-    "holdout_question": 33,
-    "duplicate": 28,
+    "duplicate": 33,
+    "builder_skip": 31,
+    "holdout_question": 31,
     "outcome_no_data": 8,
-    "holdout_plan": 6
+    "holdout_plan": 7
   },
   "counts": {
     "scenario": {
@@ -26,15 +26,15 @@
     },
     "template": {
       "std.yoy_change": 134,
+      "std.change": 129,
       "std.extrema": 128,
-      "std.change": 128,
       "std.series": 126,
       "std.coverage": 126,
-      "clarify.ambiguous_in_state": 119,
-      "clarify.fictional": 119,
       "clarify.multi_state": 118,
-      "std.yoy_asof": 108,
-      "clarify.typo": 94,
+      "clarify.fictional": 118,
+      "clarify.ambiguous_in_state": 117,
+      "std.yoy_asof": 107,
+      "clarify.typo": 97,
       "scope.rank_dollar": 77,
       "scope.state_aggregate": 77,
       "scope.rank_decline": 76,
@@ -43,69 +43,73 @@
       "scope.list_trailing": 74,
       "scope.list_mixed": 73,
       "follow.add": 73,
+      "follow.op": 73,
       "scope.rank_value": 72,
-      "follow.op": 72,
       "follow.period": 71,
-      "retry.scope_neither": 65,
-      "follow.swap": 64,
-      "retry.switch_unsupported": 63,
+      "retry.scope_neither": 66,
+      "retry.switch_unsupported": 65,
+      "follow.swap": 63,
+      "refusal.missing": 61,
       "refusal.forecast": 61,
-      "refusal.advice": 61,
-      "refusal.missing": 60,
-      "retry.scope_both": 60,
+      "refusal.advice": 59,
       "follow.metric": 59,
       "retry.missing_rank_by": 58,
+      "retry.scope_both": 58,
       "follow.forecast": 56,
       "follow.rank": 55,
-      "retry.bad_month": 54,
-      "refusal.injection_with_data": 52,
-      "refusal.sql": 51,
-      "refusal.modeling": 46,
-      "refusal.op": 44,
+      "retry.bad_month": 53,
+      "refusal.injection_with_data": 51,
+      "refusal.modeling": 48,
+      "refusal.sql": 48,
+      "refusal.op": 47,
       "refusal.injection": 41,
       "refusal.sql_translate": 34
     },
     "split": {
-      "train": 2639,
-      "dev": 361
+      "train": 2643,
+      "dev": 357
     },
     "expect": {
-      "answer": 2067,
-      "respond": 483,
+      "answer": 2064,
+      "respond": 486,
       "clarify": 450
     },
     "tool": {
-      "analyze": 2517,
-      "respond": 483
+      "analyze": 2514,
+      "respond": 486
     },
     "operation": {
-      "change": 602,
-      "series": 498,
-      "rank": 488,
-      "yoy_change": 312,
-      "extrema": 275,
-      "aggregate": 195,
-      "coverage": 147
+      "change": 596,
+      "series": 495,
+      "rank": 489,
+      "yoy_change": 317,
+      "extrema": 273,
+      "aggregate": 196,
+      "coverage": 148
     },
     "metric": {
-      "zhvi": 1528,
-      "zori": 989
+      "zhvi": 1527,
+      "zori": 987
     },
     "scope": {
-      "cities": 1852,
-      "state_filter": 665
+      "cities": 1848,
+      "state_filter": 666
     },
     "respond_kind": {
-      "unsupported": 259,
+      "unsupported": 262,
       "out_of_scope": 224
     }
   },
   "max_similarity_to_eval": {
     "p50": 0.277,
-    "p95": 0.485,
+    "p95": 0.487,
     "max": 0.597,
     "threshold": 0.6
   },
   "distinct_question_share": 0.939,
-  "mean_prompt_chars": 3798
+  "mean_prompt_chars": 3798,
+  "sha256": {
+    "train.jsonl": "5ce24a52101af8da72b8e7bb53252730527b85aa6c1f181f60d1b27561cc7fee",
+    "dev.jsonl": "8f33f206d7018590fb67309a5cac0f797c4010ad89b6d1ccc1f634468894a5f5"
+  }
 }
