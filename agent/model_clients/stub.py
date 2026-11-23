@@ -137,13 +137,23 @@ def demo_rules() -> list[tuple[str, dict[str, Any]]]:
             ),
         ),
         (
-            r"what is zori|what is zhvi",
-            {
-                "call": {
-                    "tool": "search_knowledge",
-                    "query": "ZORI methodology smoothing",
-                    "top_k": 3,
-                }
-            },
+            # The follow-up to the Colorado ranking; the real planner reads the conversation.
+            r"what about rent",
+            analyze(
+                metric="zori",
+                state_filter="CO",
+                start_month="2025-01",
+                end_month="2025-12",
+                operation="rank",
+                rank_by="pct_change",
+            ),
+        ),
+        (
+            r"what is zori",
+            {"call": {"tool": "search_knowledge", "query": "ZORI smoothing", "top_k": 3}},
+        ),
+        (
+            r"what is zhvi",
+            {"call": {"tool": "search_knowledge", "query": "ZHVI definition", "top_k": 3}},
         ),
     ]

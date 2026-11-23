@@ -4,9 +4,9 @@ A small language model plans analyses of Zillow city-level home values (ZHVI) an
 trusted code validates each plan, compiles it to parameterized DuckDB SQL, and computes the
 results deterministically. The model never writes SQL and never supplies the numbers.
 
-> Status: Step 3 in progress. Baselines on the 200-case eval set: Qwen2.5-3B-Instruct reaches
-> 51.1% execution accuracy (Llama-3.2-3B: 27.5%), see [docs/evaluation.md](docs/evaluation.md).
-> Now: LoRA training data for the Qwen planner ([training/](training/README.md)).
+> Status: Step 4 (product). The LoRA-tuned Qwen2.5-3B planner reaches 89.3% execution accuracy on
+> the 200-case eval set (base model: 51.1%), see [docs/evaluation.md](docs/evaluation.md). Done so
+> far: the methodology knowledge base (4a) and the Streamlit UI (4b); next, app deployment (4c).
 
 ## Quick start (no AWS needed)
 
@@ -41,6 +41,21 @@ curl -s localhost:8000/v1/ask -H 'content-type: application/json' \
 
 Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an `X-API-Key` header.
 
+## Run the UI
+
+The Streamlit UI is a client of the API: start the API first (above), then
+
+```bash
+uv run streamlit run ui/app.py        # opens http://localhost:8501
+```
+
+Set `ANALYST_API_URL` (default `http://localhost:8000`) and, if the API has one, `ANALYST_API_KEY`.
+Ask in the sidebar or pick an example. Each answer has three tabs: **AI response** (warnings,
+answer, headline numbers, chart), **Queried data** (every row, with CSV download), and **Evidence &
+trace** (dataset version, resolved cities, the SQL and its parameters, the model's plan, knowledge
+sources, and the tool events with timings). With `MODEL_BACKEND=stub`, the example questions are
+answered by fixed rules, so the whole UI works without AWS.
+
 ## Layout
 
 | Path | Role |
@@ -60,6 +75,7 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `rag/corpus/` | Methodology knowledge base (ZHVI, ZORI, coverage, scope) with source citations |
 | `tools/knowledge.py` | BM25 retrieval over the corpus for `search_knowledge` |
 | `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
+| `ui/` | Streamlit UI (`app.py`), its API client (`client.py`), and display helpers (`view.py`) |
 | `evaluation/` | Frozen eval set (200 cases), oracle, scorer, runner — see [evaluation/README.md](evaluation/README.md) |
 | `scripts/run_eval.py` | Score a model backend (`oracle`, `stub`, `sagemaker`) on the eval set |
 | `scripts/deploy_endpoint.py` | Deploy / check / delete the SageMaker TGI endpoint — see [docs/deployment.md](docs/deployment.md) |
