@@ -322,10 +322,11 @@ the eval set doesn't cover: switching the metric right after a **state ranking**
 | same ranking → "What about rent growth for the same cities and year?" | correct ZORI ranking (52 cities) |
 | "What was Mead, CO's highest ZHVI month in 2025?" → "What about rent there?" | correct plan; Mead has no ZORI data, so it reports that |
 
-Why: of the 654 multi-turn training examples in data v2, only 4 switch the metric, and all four
-follow a single-city question; the 122 follow-ups on state rankings all keep the metric. The eval
-set has the same blind spot: both of its "rent" follow-ups (`follow_up-001`, `follow_up-020`)
-follow a single-city question, so the 85% follow-up score doesn't measure this case.
+Why: in data v2, 50 follow-ups switch the metric relative to the previous turn's context, and all
+50 follow a single-city question (`change` or `series`). None follow a state ranking: all 59
+follow-ups to a state ranking keep the metric. The eval set has the same blind spot: both of its
+"rent" follow-ups (`follow_up-001`, `follow_up-020`) follow a single-city question, so the 85%
+follow-up score doesn't measure this case.
 
 The demo uses the explicit phrasing. Fixing the model would need metric-switch follow-ups after
 rankings and aggregates in the training data, with new eval cases for them (v1 stays frozen).
