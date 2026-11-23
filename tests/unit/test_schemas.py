@@ -55,3 +55,100 @@ def test_tool_call_envelope_discriminates_by_tool():
 def test_json_schema_is_exportable():
     schema = tool_call_json_schema()
     assert "AnalysisPlan" in schema["$defs"]
+
+
+# ---- decoding schema (sent to TGI for grammar-constrained decoding) --------------------------
+
+
+def _walk_keys(node):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield k
+            yield from _walk_keys(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _walk_keys(v)
+
+
+def test_decoding_schema_has_no_grammar_blowup_keywords():
+    from tools.schemas import decoding_schema
+
+    keys = set(_walk_keys(decoding_schema()))
+    assert not keys & {
+        "$ref",
+        "$defs",
+        "maxLength",
+        "minLength",
+        "pattern",
+        "maxItems",
+        "discriminator",
+        "default",
+    }
+
+
+def _analyze_plan_variants():
+    from tools.schemas import decoding_schema
+
+    options = decoding_schema()["properties"]["call"]["oneOf"]
+    analyze = next(o for o in options if o["properties"]["tool"]["const"] == "analyze")
+    return options, analyze["properties"]["plan"]["oneOf"]
+
+
+def test_decoding_schema_keeps_structure_enums_and_required_fields():
+    import json
+
+    from tools.schemas import decoding_schema
+
+    options, variants = _analyze_plan_variants()
+    assert {o["properties"]["tool"]["const"] for o in options} == {
+        "analyze",
+        "search_knowledge",
+        "respond",
+    }
+    for plan_variant in variants:
+        assert {"metric", "operation"} <= set(plan_variant["required"])
+        assert plan_variant["properties"]["operation"]["enum"] == [
+            "series",
+            "change",
+            "yoy_change",
+            "extrema",
+            "rank",
+            "aggregate",
+            "coverage",
+        ]
+        assert plan_variant["additionalProperties"] is False
+    respond = next(o for o in options if o["properties"]["tool"]["const"] == "respond")
+    assert respond["properties"]["kind"]["enum"] == ["clarify", "unsupported", "out_of_scope"]
+    assert len(json.dumps(decoding_schema())) < len(json.dumps(tool_call_json_schema()))
+
+
+def test_decoding_schema_enforces_exactly_one_scope():
+    # The baseline's most common failure: plans with both or neither of cities/state_filter.
+    _, (city_scoped, state_scoped) = _analyze_plan_variants()
+    assert "cities" in city_scoped["required"] and "state_filter" not in city_scoped["properties"]
+    assert city_scoped["properties"]["cities"]["minItems"] == 1
+    assert "state_filter" in state_scoped["required"] and "cities" not in state_scoped["properties"]
+    assert state_scoped["properties"]["state_filter"]["type"] == "string"
+
+
+def test_bounds_dropped_from_decoding_are_still_enforced_by_validation():
+    with pytest.raises(ValidationError):
+        AnalysisPlan.model_validate(plan(start_month="2025-1"))  # pattern
+    with pytest.raises(ValidationError):
+        ToolCall.model_validate(
+            {"call": {"tool": "respond", "kind": "clarify", "text": "x" * 2001}}  # maxLength
+        )
+
+
+def test_decoding_schema_restricts_states_to_codes():
+    from tools.schemas import US_STATE_CODES
+
+    _, (city_scoped, state_scoped) = _analyze_plan_variants()
+    assert state_scoped["properties"]["state_filter"]["enum"] == list(US_STATE_CODES)
+    city_state = city_scoped["properties"]["cities"]["items"]["properties"]["state"]
+    assert {"type": "string", "enum": list(US_STATE_CODES)} in city_state["anyOf"]
+    assert {"type": "null"} in city_state["anyOf"]  # the state stays optional
+    assert len(US_STATE_CODES) == 51 and all(
+        AnalysisPlan.model_validate(plan(cities=[{"city": "X", "state": c}]))
+        for c in US_STATE_CODES
+    )

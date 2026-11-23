@@ -283,3 +283,18 @@ def test_run_ids_are_folder_safe():
     spec.loader.exec_module(mod)
     assert mod.safe_name("meta-llama/Llama-3.2-3B-Instruct") == "meta-llama-Llama-3.2-3B-Instruct"
     assert mod.safe_name("///") == "model"
+
+
+def test_results_keep_raw_planner_outputs_plan_and_trace(db, tmp_path):
+    bad = '{"call": {"tool": "analyze", "plan": {"metric": "zhvi", "operation": "change"}}}'
+    gold = {"call": FIXTURE_CASES[0].gold_call}
+    results = run_eval(FIXTURE_CASES[:1], db, lambda c: ScriptedModelClient([bad, gold, ""]))
+    r = results[0]
+    assert r.planner_outputs[0] == bad and len(r.planner_outputs) == 2
+    assert r.plan["cities"][0]["city"] == "Denver"
+    assert [e["status"] for e in r.trace][:2] == ["retry", "ok"]
+    write_report(
+        tmp_path / "run", results, model_id="m", db=db, cases_file="f", knowledge_base=False
+    )
+    saved = json.loads((tmp_path / "run" / "results.jsonl").read_text().splitlines()[0])
+    assert saved["planner_outputs"][0] == bad

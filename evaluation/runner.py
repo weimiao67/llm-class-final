@@ -121,7 +121,10 @@ def render_markdown(meta: dict[str, Any], summary: dict[str, Any], results: list
     lines += ["", f"## Failures ({len(failed)})", ""]
     for r in failed:
         lines.append(f"- **{r.id}** — {r.question}  ")
-        lines.append(f"  {'; '.join(r.failures) or 'see results.jsonl'}")
+        lines.append(f"  {'; '.join(r.failures) or 'see results.jsonl'}  ")
+        if r.planner_outputs:
+            first = r.planner_outputs[0].replace("`", "'")[:240]
+            lines.append(f"  first output: `{first}`")
     return "\n".join(lines) + "\n"
 
 

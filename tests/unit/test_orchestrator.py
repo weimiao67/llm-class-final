@@ -214,3 +214,35 @@ def test_turn_timeout_stops_before_the_next_model_call(db):
     assert r.kind == "error" and "too long" in r.answer
     assert len(model.calls) == 1  # the answer-writer call was never made
     assert r.trace[-1].detail == "turn timeout"
+
+
+def test_retry_feedback_tells_the_model_to_fix_not_reply(db):
+    bad = analyze(metric="zhvi", cities=[{"city": "Denver"}], operation="rank")  # no rank_by
+    agent, model = make(db, [bad, DENVER_2025, GOOD_ANSWER])
+    agent.run_turn("Denver 2025?")
+    feedback = model.calls[1]["messages"][-1]["content"]
+    assert feedback.startswith("TOOL RESULT:") and "rank_by" in feedback
+    assert "Do not repeat this error to the user" in feedback
+    assert 'kind "unsupported"' in feedback  # may switch to unsupported instead of forcing a fix
+
+
+def test_rejected_plan_can_end_as_unsupported(db):
+    # v0 failure mode: "bedroom count" -> analyze -> rejected. The model must be allowed to
+    # switch to respond(unsupported) on the retry instead of answering a different question.
+    bad = analyze(metric="zhvi", cities=[{"city": "Denver", "state": "CO"}], operation="rank")
+    unsupported = respond("unsupported", "The database has no bedroom-count field.")
+    agent, model = make(db, [bad, unsupported])
+    r = agent.run_turn("Compare homes by bedroom count in Denver, CO.")
+    assert (r.kind, r.answer_source) == ("unsupported", "model")
+    assert model.calls[1]["profile"] == "plan_retry"
+
+
+def test_planner_prompt_v2_states_scope_and_tool_rules(db):
+    from agent.prompts import PROMPT_VERSION, planner_messages
+
+    system = planner_messages(db, "q", [], None)[0]["content"]
+    assert PROMPT_VERSION == "planner-v2"
+    assert "EXACTLY ONE" in system and "state_filter" in system
+    assert "Never use it to get values" in system
+    agent, _ = make(db, [DENVER_2025, GOOD_ANSWER])
+    assert agent.run_turn("Denver 2025?").prompt_version == "planner-v2"

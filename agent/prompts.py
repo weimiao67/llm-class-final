@@ -1,4 +1,8 @@
-"""Prompt construction for the planner and answer-writer steps (prompt version ``planner-v1``)."""
+"""Prompt construction for the planner and answer-writer steps (see ``PROMPT_VERSION``).
+
+planner-v2 (after the Llama-3.2-3B baseline): explicit tool-choice rules, city-or-state scope
+rule, and retry feedback that tells the model to fix the plan instead of replying to the user.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,7 @@ from typing import Any
 
 from housing.db import HousingDB
 
-PROMPT_VERSION = "planner-v1"
+PROMPT_VERSION = "planner-v2"
 
 PLANNER_SYSTEM = """\
 You are the planner for a housing-market data analyst. You never answer from memory and never
@@ -17,7 +21,8 @@ write SQL or code. On every step you output exactly one JSON object:
 Tools:
 1. analyze — run a descriptive analysis on the governed database.
    {{"call": {{"tool": "analyze", "plan": AnalysisPlan}}}}
-2. search_knowledge — look up what a metric means or how it is produced.
+2. search_knowledge — ONLY for what a metric means or how it is produced (definitions,
+   methodology, limitations). Never use it to get values, trends, or rankings.
    {{"call": {{"tool": "search_knowledge", "query": "...", "top_k": 3}}}}
 3. respond — reply without running a tool.
    {{"call": {{"tool": "respond", "kind": KIND, "text": "..."}}}}
@@ -27,8 +32,11 @@ Tools:
 
 AnalysisPlan fields:
 - metric: "zhvi" (home values) or "zori" (rents)
-- cities: list of {{"city", "state" (2-letter, optional), "county" (optional)}}, at most 20
-- state_filter: 2-letter state for all cities in a state (use instead of cities)
+- Scope: set EXACTLY ONE of these two, never both and never neither:
+  - cities: list of {{"city", "state" (2-letter, optional), "county" (optional)}}, 1 to 20 —
+    when the user names cities
+  - state_filter: 2-letter state — when the question is about all cities in a state
+    ("Colorado cities", "cities in Texas")
 - start_month / end_month: "YYYY-MM" or null (null = all available data)
 - operation: one of
     series      monthly values over the period (needs cities)
@@ -42,6 +50,12 @@ AnalysisPlan fields:
 
 Data catalog (dataset version {dataset_version}):
 {catalog}
+
+Choosing a tool:
+- Any question about values, levels, changes, growth, highs/lows, rankings, averages, or which
+  months have data → analyze, even if it mentions ZHVI or ZORI by name.
+- "What is / how is ... calculated / what does ... mean" about a metric → search_knowledge.
+- Ambiguous, out-of-scope, or unsupported questions → respond.
 
 Rules:
 - Use only the fields above. Unknown fields (e.g. bedrooms, price per square foot, crime) are not in
@@ -100,6 +114,26 @@ def planner_messages(
 def tool_result_message(payload: dict[str, Any]) -> dict[str, str]:
     """Tool results go back to the planner as a user-role message with a fixed prefix."""
     return {"role": "user", "content": "TOOL RESULT: " + json.dumps(payload, default=str)}
+
+
+RETRY_INSTRUCTION = (
+    "Your previous tool call was rejected for the reasons above. This message is from the "
+    "system, not the user. Do not repeat this error to the user. Choose one: (a) if the "
+    "question can be answered with the available fields and operations, output a corrected "
+    "tool call that fixes the listed fields; or (b) if it cannot (for example it needs a field "
+    "the database doesn't have, such as bedrooms, or an operation that isn't listed, such as "
+    'correlation), call respond with kind "unsupported" (or "out_of_scope" for '
+    "forecasts) and name what is missing. Never answer a different question than the user asked."
+)
+
+
+def retry_message(payload: dict[str, Any]) -> dict[str, str]:
+    """Feedback after a rejected tool call: the errors plus an instruction to fix and retry.
+    The baseline model otherwise often relayed the validation error to the user."""
+    return {
+        "role": "user",
+        "content": "TOOL RESULT: " + json.dumps(payload, default=str) + "\n" + RETRY_INSTRUCTION,
+    }
 
 
 def answer_messages(question: str, result: dict[str, Any]) -> list[dict[str, str]]:

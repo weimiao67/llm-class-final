@@ -60,3 +60,11 @@ def test_null_content_becomes_empty_text():
 
 def test_health_reports_endpoint_status():
     assert client(FakeRuntime(REPLY)).health()["status"] == "InService"
+
+
+def test_attempts_count_the_first_try():
+    # botocore's "max_attempts" counts retries only (2 -> 3 sends); total_max_attempts doesn't.
+    default = SageMakerModelClient("e", sagemaker_client=FakeSageMaker())
+    assert default._runtime.meta.config.retries["total_max_attempts"] == 2
+    once = SageMakerModelClient("e", sagemaker_client=FakeSageMaker(), total_attempts=1)
+    assert once._runtime.meta.config.retries["total_max_attempts"] == 1

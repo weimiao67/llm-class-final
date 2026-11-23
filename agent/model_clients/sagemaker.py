@@ -24,13 +24,16 @@ class SageMakerModelClient:
         runtime_client: Any | None = None,
         sagemaker_client: Any | None = None,
         timeout_s: int = DEFAULT_TIMEOUT_S,
+        total_attempts: int = 2,
     ):
         self.endpoint_name = endpoint_name
         self.model_id = model_id or endpoint_name
         config = Config(
             read_timeout=timeout_s,
             connect_timeout=5,
-            retries={"max_attempts": 2, "mode": "standard"},  # one retry on throttling/5xx
+            # total_attempts counts the first try (2 = one retry on throttling, 5xx, or read
+            # timeout). botocore's "max_attempts" key counts retries only, so it is not used.
+            retries={"total_max_attempts": total_attempts, "mode": "standard"},
         )
         self._runtime = runtime_client or boto3.client(
             "sagemaker-runtime", region_name=region, config=config

@@ -22,6 +22,62 @@ Month = Annotated[
 StateCode = Annotated[str, Field(pattern=r"^[A-Z]{2}$", description="Two-letter state code")]
 
 MAX_CITIES = 20
+
+# 50 states + DC. Used as an enum in the decoding schema: a short list is cheap for grammars
+# (unlike long length bounds) and rules out names like "Colorado" where a code is required.
+US_STATE_CODES = (
+    "AK",
+    "AL",
+    "AR",
+    "AZ",
+    "CA",
+    "CO",
+    "CT",
+    "DC",
+    "DE",
+    "FL",
+    "GA",
+    "HI",
+    "IA",
+    "ID",
+    "IL",
+    "IN",
+    "KS",
+    "KY",
+    "LA",
+    "MA",
+    "MD",
+    "ME",
+    "MI",
+    "MN",
+    "MO",
+    "MS",
+    "MT",
+    "NC",
+    "ND",
+    "NE",
+    "NH",
+    "NJ",
+    "NM",
+    "NV",
+    "NY",
+    "OH",
+    "OK",
+    "OR",
+    "PA",
+    "RI",
+    "SC",
+    "SD",
+    "TN",
+    "TX",
+    "UT",
+    "VA",
+    "VT",
+    "WA",
+    "WI",
+    "WV",
+    "WY",
+)
 MAX_LIMIT = 50
 
 
@@ -144,5 +200,88 @@ class QueryArtifact(BaseModel):
 
 
 def tool_call_json_schema() -> dict[str, Any]:
-    """JSON Schema for prompts and grammar-constrained decoding."""
+    """Full JSON Schema of the tool call (documentation and validation reference)."""
     return ToolCall.model_json_schema()
+
+
+# Keywords that make grammar compilation explode or that grammar engines don't need. Length bounds
+# turn into huge repetition automata (text up to 2000 characters), and regex patterns (months,
+# states) multiply states. Pydantic still enforces all of them after decoding, so removing them
+# here doesn't loosen validation; a violation goes back to the model as a normal retry.
+_DECODING_DROP = {
+    "maxLength",
+    "minLength",
+    "pattern",
+    "maxItems",
+    "minItems",
+    "maximum",
+    "minimum",
+    "exclusiveMaximum",
+    "exclusiveMinimum",
+    "discriminator",
+    "title",
+    "description",
+    "default",
+    "format",
+}
+
+
+def decoding_schema() -> dict[str, Any]:
+    """Structure-only schema for constrained decoding (TGI ``response_format``).
+
+    It keeps object shapes, required fields, enums, and types, inlines every ``$ref``, and drops
+    the keywords above, so the grammar stays small enough to compile quickly.
+
+    The analysis plan is split into two variants, so the grammar itself enforces the scope rule
+    that the baseline model broke most often ("exactly one of cities or state_filter"): a
+    city-scoped plan has a non-empty ``cities`` list and no ``state_filter``, and a state-scoped
+    plan has ``state_filter`` and no ``cities``.
+    """
+    full = ToolCall.model_json_schema()
+    defs = full.pop("$defs", {})
+
+    def clean(node: Any) -> Any:
+        if isinstance(node, dict):
+            if "$ref" in node:
+                return clean(defs[node["$ref"].rsplit("/", 1)[-1]])
+            return {k: clean(v) for k, v in node.items() if k not in _DECODING_DROP}
+        if isinstance(node, list):
+            return [clean(v) for v in node]
+        return node
+
+    schema = clean(full)
+    for option in schema["properties"]["call"]["oneOf"]:
+        if option["properties"]["tool"].get("const") == "analyze":
+            option["properties"]["plan"] = _scoped_plan_variants(option["properties"]["plan"])
+    return schema
+
+
+def _scoped_plan_variants(plan: dict[str, Any]) -> dict[str, Any]:
+    """Replace one plan object with city-scoped | state-scoped variants (see decoding_schema)."""
+    props = plan["properties"]
+    required = plan.get("required", [])
+
+    state_enum = {"type": "string", "enum": list(US_STATE_CODES)}
+    city_item = props["cities"]["items"]
+    city_item = {
+        **city_item,
+        "properties": {
+            **city_item["properties"],
+            "state": {"anyOf": [state_enum, {"type": "null"}]},
+        },
+    }
+    city_props = {k: v for k, v in props.items() if k != "state_filter"}
+    # minItems 1 is a small bound, cheap for grammars.
+    city_props["cities"] = {**props["cities"], "items": city_item, "minItems": 1}
+    state_props = {k: v for k, v in props.items() if k != "cities"}
+    state_props["state_filter"] = state_enum  # required here, so never null
+
+    def variant(properties: dict[str, Any], scope: str) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": properties,
+            "required": [*required, scope],
+        }
+
+    return {"oneOf": [variant(city_props, "cities"), variant(state_props, "state_filter")]}

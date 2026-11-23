@@ -39,6 +39,13 @@ class CaseResult:
     model_calls: int
     answer: str
     failures: list[str] = field(default_factory=list)
+    # Raw evidence for diagnosis: what the model actually emitted and what the agent did.
+    planner_outputs: list[str] = field(default_factory=list)
+    plan: dict[str, Any] | None = None
+    trace: list[dict[str, Any]] = field(default_factory=list)
+
+
+MAX_OUTPUT_CHARS = 2000  # per planner output kept in results.jsonl
 
 
 # ---- normalization ----------------------------------------------------------------------------
@@ -182,6 +189,9 @@ class Scorer:
             model_calls=model_calls,
             answer=resp.answer,
             failures=failures,
+            planner_outputs=[o[:MAX_OUTPUT_CHARS] for o in planner_outputs],
+            plan=resp.plan,
+            trace=[e.model_dump() for e in resp.trace],
         )
 
 
