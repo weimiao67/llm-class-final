@@ -1,0 +1,291 @@
+{
+  "meta": {
+    "run_id": "20261123-192137-qwen2.5-3b-lora-f261a5f4d7-unconstrained",
+    "created_at": "2026-11-23T19:21:37+00:00",
+    "model_id": "qwen2.5-3b-lora-f261a5f4d7",
+    "dataset_version": "23ccd46a4560",
+    "prompt_version": "planner-v2",
+    "git_sha": "c20da49",
+    "cases_file": "evaluation/cases/v1.jsonl",
+    "knowledge_base": "unavailable",
+    "decoding": "unconstrained"
+  },
+  "overall": {
+    "cases": 200,
+    "envelope_valid": {
+      "rate": 0.995,
+      "n": 200,
+      "hits": 199
+    },
+    "tool_correct": {
+      "rate": 0.99,
+      "n": 200,
+      "hits": 198
+    },
+    "kind_correct": {
+      "rate": 0.965,
+      "n": 200,
+      "hits": 193
+    },
+    "plan_match": {
+      "rate": 0.9167,
+      "n": 156,
+      "hits": 143
+    },
+    "execution_accuracy": {
+      "rate": 0.9008,
+      "n": 131,
+      "hits": 118
+    },
+    "faithful_model_answer": {
+      "rate": 0.9134,
+      "n": 127,
+      "hits": 116
+    },
+    "turn_success": {
+      "rate": 0.925,
+      "n": 200,
+      "hits": 185
+    },
+    "clarify_via_analyze": {
+      "rate": 1.0,
+      "n": 23,
+      "hits": 23
+    },
+    "latency_ms_p50": 1101.5,
+    "latency_ms_p95": 2064.0,
+    "mean_model_calls": 1.7
+  },
+  "families": {
+    "aggregate": {
+      "cases": 20,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 20,
+        "hits": 20
+      },
+      "kind_correct": {
+        "rate": 1.0,
+        "n": 20,
+        "hits": 20
+      },
+      "execution_accuracy": {
+        "rate": 0.9474,
+        "n": 19,
+        "hits": 18
+      },
+      "turn_success": {
+        "rate": 0.95,
+        "n": 20,
+        "hits": 19
+      }
+    },
+    "ambiguous": {
+      "cases": 15,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      },
+      "kind_correct": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      },
+      "execution_accuracy": {
+        "rate": null,
+        "n": 0,
+        "hits": 0
+      },
+      "turn_success": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      }
+    },
+    "boundary": {
+      "cases": 25,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 25,
+        "hits": 25
+      },
+      "kind_correct": {
+        "rate": 0.96,
+        "n": 25,
+        "hits": 24
+      },
+      "execution_accuracy": {
+        "rate": 1.0,
+        "n": 1,
+        "hits": 1
+      },
+      "turn_success": {
+        "rate": 0.96,
+        "n": 25,
+        "hits": 24
+      }
+    },
+    "coverage": {
+      "cases": 10,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 10,
+        "hits": 10
+      },
+      "kind_correct": {
+        "rate": 0.9,
+        "n": 10,
+        "hits": 9
+      },
+      "execution_accuracy": {
+        "rate": 0.875,
+        "n": 8,
+        "hits": 7
+      },
+      "turn_success": {
+        "rate": 0.9,
+        "n": 10,
+        "hits": 9
+      }
+    },
+    "extrema": {
+      "cases": 20,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 20,
+        "hits": 20
+      },
+      "kind_correct": {
+        "rate": 1.0,
+        "n": 20,
+        "hits": 20
+      },
+      "execution_accuracy": {
+        "rate": 0.8333,
+        "n": 18,
+        "hits": 15
+      },
+      "turn_success": {
+        "rate": 0.85,
+        "n": 20,
+        "hits": 17
+      }
+    },
+    "follow_up": {
+      "cases": 20,
+      "tool_correct": {
+        "rate": 0.95,
+        "n": 20,
+        "hits": 19
+      },
+      "kind_correct": {
+        "rate": 0.9,
+        "n": 20,
+        "hits": 18
+      },
+      "execution_accuracy": {
+        "rate": 0.8889,
+        "n": 18,
+        "hits": 16
+      },
+      "turn_success": {
+        "rate": 0.85,
+        "n": 20,
+        "hits": 17
+      }
+    },
+    "injection": {
+      "cases": 10,
+      "tool_correct": {
+        "rate": 0.9,
+        "n": 10,
+        "hits": 9
+      },
+      "kind_correct": {
+        "rate": 0.9,
+        "n": 10,
+        "hits": 9
+      },
+      "execution_accuracy": {
+        "rate": 0.8,
+        "n": 5,
+        "hits": 4
+      },
+      "turn_success": {
+        "rate": 0.9,
+        "n": 10,
+        "hits": 9
+      }
+    },
+    "methodology": {
+      "cases": 15,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      },
+      "kind_correct": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      },
+      "execution_accuracy": {
+        "rate": null,
+        "n": 0,
+        "hits": 0
+      },
+      "turn_success": {
+        "rate": 1.0,
+        "n": 15,
+        "hits": 15
+      }
+    },
+    "multi_city": {
+      "cases": 30,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 30,
+        "hits": 30
+      },
+      "kind_correct": {
+        "rate": 0.9333,
+        "n": 30,
+        "hits": 28
+      },
+      "execution_accuracy": {
+        "rate": 0.8276,
+        "n": 29,
+        "hits": 24
+      },
+      "turn_success": {
+        "rate": 0.8333,
+        "n": 30,
+        "hits": 25
+      }
+    },
+    "single_city": {
+      "cases": 35,
+      "tool_correct": {
+        "rate": 1.0,
+        "n": 35,
+        "hits": 35
+      },
+      "kind_correct": {
+        "rate": 1.0,
+        "n": 35,
+        "hits": 35
+      },
+      "execution_accuracy": {
+        "rate": 1.0,
+        "n": 33,
+        "hits": 33
+      },
+      "turn_success": {
+        "rate": 1.0,
+        "n": 35,
+        "hits": 35
+      }
+    }
+  }
+}

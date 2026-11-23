@@ -313,3 +313,52 @@ def test_unconstrained_run_is_labeled_in_the_report(db, tmp_path):
     )
     assert report["meta"]["decoding"] == "unconstrained"
     assert "planning: unconstrained" in (tmp_path / "u" / "report.md").read_text()
+
+
+# ---- v1.1 corrections and offline re-scoring ---------------------------------------------------
+
+
+def test_v1_1_changes_exactly_the_four_documented_cases():
+    from evaluation.rescore import changed_ids
+
+    v11 = load_cases(ROOT / "evaluation" / "cases" / "v1.1.jsonl")
+    ids = changed_ids(load_cases(V1), v11)
+    assert ids == {"follow_up-007", "follow_up-016", "multi_city-009", "coverage-008"}
+    for case in v11:
+        if case.id in ids:
+            assert case.expected_response == "clarify"
+            assert case.notes.startswith("v1.1 correction")
+
+
+def test_rescore_updates_only_changed_cases(db, tmp_path):
+    from evaluation.rescore import rescore_run
+
+    plan = {"metric": "zhvi", "cities": [{"city": "Denver", "state": "CO"}], "operation": "change"}
+    old = case(id="a", gold_call={"tool": "analyze", "plan": plan})
+    other = case(id="b", gold_call={"tool": "analyze", "plan": plan})
+    corrected = case(
+        id="a",
+        gold_call={
+            "tool": "analyze",
+            "plan": {**plan, "cities": [{"city": "Oakwood", "state": "OH"}]},
+        },
+        expected_response="clarify",
+        notes="v1.1 correction: test",
+    )
+    results = run_eval([old, other], db, OracleModelClient)  # both succeed as answers
+    write_report(
+        tmp_path / "run", results, model_id="m", db=db, cases_file="f", knowledge_base=False
+    )
+    rescored, summary = rescore_run(tmp_path / "run", [old, other], [corrected, other], db)
+    by_id = {r.id: r for r in rescored}
+    assert not by_id["a"].success and by_id["a"].exec_match is None  # now expects clarify
+    assert "response kind 'answer', expected 'clarify'" in by_id["a"].failures
+    assert by_id["b"].success  # untouched
+    assert summary["overall"]["turn_success"]["rate"] == 0.5
+
+
+def test_rescore_rejects_mismatched_case_sets():
+    from evaluation.rescore import changed_ids
+
+    with pytest.raises(ValueError, match="same case ids"):
+        changed_ids([case(id="a")], [case(id="b")])

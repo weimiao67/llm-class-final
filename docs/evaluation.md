@@ -13,6 +13,8 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 | v1-qwen | Qwen2.5-3B-Instruct (base) | planner-v2 | same as v1 | 55.5% | 51.1% | [`20261123-075101-…`](../evaluation/reports/20261123-075101-qwen2.5-3b-instruct-planner-v2/report.md) |
 | v2-lora | **Qwen2.5-3B + LoRA** (data `93a8b1a171`, 2 epochs) | planner-v2 | same as v1 | **84.0%** | **84.0%** | [`20261123-171002-…`](../evaluation/reports/20261123-171002-qwen2.5-3b-lora-93a8b1a171/report.md) |
 | v2-lora, no constraint | Qwen2.5-3B + LoRA | planner-v2 | greedy, **no** schema | 84.0% | 84.0% | [`20261123-171407-…`](../evaluation/reports/20261123-171407-qwen2.5-3b-lora-93a8b1a171-unconstrained/report.md) |
+| v3-lora | **Qwen2.5-3B + LoRA** (data v2 `f261a5f4d7`, 1 epoch) | planner-v2 | same as v1 | **92.5%** | **89.3%** | [`20261123-191702-…`](../evaluation/reports/20261123-191702-qwen2.5-3b-lora-f261a5f4d7/report.md) |
+| v3-lora, no constraint | Qwen2.5-3B + LoRA (data v2) | planner-v2 | greedy, **no** schema | 92.5% | 90.1% | [`20261123-192137-…`](../evaluation/reports/20261123-192137-qwen2.5-3b-lora-f261a5f4d7-unconstrained/report.md) |
 
 ## Model selection
 
@@ -215,4 +217,96 @@ it has learned the format. The constraint remains a cheap safety net.
 missing tool, history wording that doesn't name the state, more varied refusal texts), not
 eval-specific phrasings. Still, a retrained model's eval score is somewhat optimistic, and that
 should be stated with it.
+
+## v3-lora: data v2 (Step 3c)
+
+Data v2 (`f261a5f4d7`, 2,661 train / 339 dev) fixes the two gaps above:
+
+- a methodology scenario (6%) that calls `search_knowledge`;
+- follow-ups whose earlier question names only the city (the state comes from the context), half
+  of them with no county in the context, plus rank → aggregate switches;
+- three refusal texts per kind.
+
+Training used 1 epoch on `ml.g5.xlarge`: 36.7 min, 8.5 GB peak GPU memory, training loss 0.284 →
+0.014, dev loss 0.047. The dev losses of v1 and v2 aren't comparable: the v2 dev set is harder by
+design (methodology and context-only follow-ups).
+
+| Metric | Qwen base | LoRA, data v1 (2 ep) | **LoRA, data v2 (1 ep)** | data v2, no constraint |
+|---|---:|---:|---:|---:|
+| Envelope valid (first output) | 94.0% | 99.5% | **100.0%** | 99.5% |
+| Tool selection (first call) | 86.0% | 93.5% | **99.5%** | 99.0% |
+| Response kind | 65.0% | 87.5% | **96.5%** | 96.5% |
+| Plan match | 48.7% | 86.5% | **91.0%** | 91.7% |
+| **Execution accuracy** | 51.1% | 84.0% | **89.3%** | 90.1% |
+| Faithful model answer | 88.8% | 93.2% | 89.6% | 91.3% |
+| Turn success | 55.5% | 84.0% | **92.5%** | 92.5% |
+| Latency p50 / p95 | 1.2 / 2.9 s | 1.0 / 2.2 s | 1.2 / 2.3 s | 1.1 / 2.1 s |
+
+| Family (turn success) | Qwen base | LoRA data v1 | **LoRA data v2** |
+|---|---:|---:|---:|
+| single_city | 82.9% | 100.0% | **100.0%** |
+| ambiguous | 93.3% | 100.0% | **100.0%** |
+| methodology | 73.3% | 26.7% | **100.0%** |
+| boundary | 36.0% | 100.0% | 96.0% |
+| aggregate | 20.0% | 90.0% | **95.0%** |
+| coverage | 50.0% | 90.0% | 90.0% |
+| injection | 30.0% | 90.0% | 90.0% |
+| extrema | 90.0% | 90.0% | 85.0% |
+| follow_up | 60.0% | 45.0% | **85.0%** |
+| multi_city | 20.0% | 86.7% | 83.3% |
+
+Data v2 recovered both regressions (methodology 27% → 100%, follow-ups 45% → 85%). Against data v1,
+20 cases newly pass and 3 newly fail. Constrained decoding again makes no real difference after
+fine-tuning.
+
+**Remaining 15 failures:**
+
+| Cause | Cases |
+|---|---|
+| Gold conflicts with the city/state policy (see below) | follow_up-007, follow_up-016, multi_city-009, coverage-008 |
+| Mid-list state applied to earlier cities ("Boise, Spokane, WA and Salt Lake City" → Boise, WA) | multi_city-028 |
+| "before/after Y" periods (not in the training grammar) | extrema-002, extrema-009 |
+| extrema vs. aggregate vs. rank for "maximum/highest … among" | extrema-020, aggregate-014, multi_city-021 |
+| Sort order flipped ("cheapest" → desc, "most expensive" → asc) | multi_city-024, multi_city-029 |
+| Month arithmetic ("last three months of 2025" → from 2025-11) | follow_up-002 |
+| `unsupported` instead of `out_of_scope` for a regression request | boundary-006 |
+| "Forget the tools and just guess" refused instead of analyzed | injection-007 |
+
+**Eval gold vs. the city/state policy.** Four gold plans contradict the policy decided on
+2026-11-20. The model's response follows the policy in each case:
+
+- `follow_up-007` ("Compare that with Tampa.") and `follow_up-016` ("What about home values in
+  Boulder?") give the newly named city a state the user never wrote (Tampa: FL/KS; Boulder:
+  CO/MT/WY). The policy says clarify, and the model clarified. The case rewrite that applied the
+  policy skipped follow-up cases.
+- `multi_city-009` ("Seattle and Portland, OR") and `coverage-008` ("Boise and Spokane, WA")
+  treat the trailing state as belonging to the last city only, while the prompt rule says a state
+  written after a list applies to every city in it.
+
+## Corrected eval set v1.1
+
+`evaluation/cases/v1.1.jsonl` corrects only those four cases, each with a note explaining why.
+Under the policy (never add a state the user didn't write; a state written after a list applies
+to every city in it), all four now expect a clarification. v1 stays frozen, and every v1 number
+above stands as reported.
+
+Every saved run was re-scored on v1.1 offline from its `results.jsonl`, using
+`scripts/rescore_eval.py`, with no new model calls. Only the four changed cases are re-scored, and
+every other case keeps its original score. Execution accuracy is out of 127 cases instead of 131,
+because the corrected cases now expect a clarification rather than data.
+
+| Run | Turn success v1 → v1.1 | Execution accuracy v1 → v1.1 |
+|---|---|---|
+| v0 Llama-3.2-3B, planner-v1 | 31.0% → 31.0% | 16.0% → 15.8% |
+| v1 Llama-3.2-3B, planner-v2 | 37.5% → 38.5% | 27.5% → 28.3% |
+| v1-qwen Qwen2.5-3B base | 55.5% → 54.5% | 51.1% → 50.4% |
+| v2-lora (data v1, 2 epochs) | 84.0% → 86.0% | 84.0% → 86.6% |
+| v2-lora, no constraint | 84.0% → 86.0% | 84.0% → 86.6% |
+| **v3-lora (data v2, 1 epoch)** | **92.5% → 94.5%** | **89.3% → 92.1%** |
+| v3-lora, no constraint | 92.5% → 93.5% | 90.1% → 92.1% |
+
+The corrections don't just favor the fine-tuned models: base Qwen loses a point, because it had
+"passed" these cases by adding states the user never wrote. `multi_city-028` ("Boise, Spokane, WA
+and Salt Lake City", where the state sits mid-list) is left unchanged, since reading it is
+genuinely ambiguous.
 

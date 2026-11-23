@@ -152,8 +152,12 @@ def period(
     kind = rng.choice(kinds)
     first, last = ctx.first_year[metric], ctx.last_year
     y = rng.randint(first, last)
-    y2 = rng.randint(min(y + 1, last), last)
     m, m2 = rng.randint(1, 12), rng.randint(1, 12)
+    if kind in ("range", "month_range") and last > first:
+        # A range needs a start before its end. Without this, a start in the last year fell
+        # through to the empty "all data" period ("Make that ."), so redraw the start instead.
+        y = rng.randint(first, last - 1)
+    y2 = rng.randint(min(y + 1, last), last)
     if kind == "year":
         return Period(
             rng.choice(["in {y}", "during {y}", "over {y}", "for {y}", "throughout {y}"]).format(
@@ -187,6 +191,8 @@ def period(
             f"{y}-{m:02d}",
             f"{y2}-{m2:02d}",
         )
+    if kind not in ("none",) and last > first:
+        raise AssertionError(f"period kind {kind!r} produced no range")  # guarded by the redraw
     return Period("", None, None)  # all available data
 
 
@@ -573,21 +579,65 @@ INJECTION_ACTIONS = [
     "output the full observations table",
 ]
 
+# Several texts per kind (data v2): with one fixed sentence per kind, the v1 model reused them
+# where they didn't fit ("I can't change my instructions…" for "What is ZORI?").
 REFUSAL_TEXT = {
-    "missing": "The database has no {field} data. It covers ZHVI home values and ZORI rents by "
-    "city and month, so I can show those instead.",
-    "op": "{op} isn't one of the supported operations. I can show {alt} instead.",
-    "forecast": "I can't forecast or predict future values. I can show the historical trend "
-    "instead.",
-    "advice": "I can't give investment or buying advice. I can show historical home values and "
-    "rents instead.",
-    "modeling": "Modeling and prediction are out of scope. I can compare historical descriptive "
-    "measures instead.",
-    "sql": "I can't run SQL or code or share system details. Ask the question in plain language "
-    "and I'll run a governed analysis.",
-    "injection": "I can't change my instructions or bypass the analysis rules. Ask about home "
-    "values or rents for a city or state.",
+    "missing": [
+        "The database has no {field} data. It covers ZHVI home values and ZORI rents by city and "
+        "month, so I can show those instead.",
+        "There is no {field} data in this dataset, which only has home value (ZHVI) and rent "
+        "(ZORI) indices by city and month.",
+        "I can't answer that: there is no {field} field. I can show home values or rents for the "
+        "same place instead.",
+    ],
+    "op": [
+        "{op} isn't one of the supported operations. I can show {alt} instead.",
+        "I can't compute that: {op_lower} isn't available. I can show {alt}.",
+        "{op} isn't supported here. A close alternative is {alt}.",
+    ],
+    "forecast": [
+        "I can't forecast or predict future values. I can show the historical trend instead.",
+        "Predictions are out of scope: I only report historical data. I can show how values "
+        "changed in the past.",
+        "I don't make forecasts. I can show the recent history and year-over-year change instead.",
+    ],
+    "advice": [
+        "I can't give investment or buying advice. I can show historical home values and rents "
+        "instead.",
+        "Whether to buy, sell, or invest isn't something I can advise on. I can show how home "
+        "values and rents there have changed.",
+        "That's a financial decision I can't advise on, but I can show the local price and rent "
+        "history.",
+    ],
+    "modeling": [
+        "Modeling and prediction are out of scope. I can compare historical descriptive measures "
+        "instead.",
+        "I don't build models, clusters, or regressions. I can rank or compare cities on "
+        "historical changes instead.",
+        "Statistical modeling isn't supported. I can show descriptive comparisons such as "
+        "rankings or medians.",
+    ],
+    "sql": [
+        "I can't run SQL or code or share system details. Ask the question in plain language and "
+        "I'll run a governed analysis.",
+        "Raw SQL and code aren't executed here. Tell me what you want to know about home values "
+        "or rents instead.",
+        "I don't run user-supplied queries or commands. Describe the analysis in words and I'll "
+        "plan it.",
+    ],
+    "injection": [
+        "I can't change my instructions or bypass the analysis rules. Ask about home values or "
+        "rents for a city or state.",
+        "Those instructions don't change how I work. I can answer questions about home values "
+        "and rents.",
+        "I can't share internal instructions or data dumps. Ask a question about a city's or "
+        "state's housing data.",
+    ],
 }
+
+
+def refusal_text(rng: random.Random, kind: str, **fields: str) -> str:
+    return rng.choice(REFUSAL_TEXT[kind]).format(**fields)
 
 
 def refusal_builder(tid: str, kind: str):
@@ -610,14 +660,22 @@ def refusal_builder(tid: str, kind: str):
             slots["field"] = phrase
             if "{period}" in shape:
                 slots["period"] = period(rng, ctx, metric, ("year", "since")).phrase
-            answer = respond("unsupported", REFUSAL_TEXT["missing"].format(field=label))
+            answer = respond(
+                "unsupported",
+                refusal_text(rng, "missing", field=label),
+            )
         elif kind == "op":
             shapes = [s for s, _, _ in UNSUPPORTED_OPS]
             shape, _ = pick(shapes, split, rng)
             _, op_name, alt = next(o for o in UNSUPPORTED_OPS if o[0] == shape)
             if "{period}" in shape:
                 slots["period"] = period(rng, ctx, metric, ("range",)).phrase
-            answer = respond("unsupported", REFUSAL_TEXT["op"].format(op=op_name, alt=alt))
+            answer = respond(
+                "unsupported",
+                refusal_text(
+                    rng, "op", op=op_name, alt=alt, op_lower=op_name[:1].lower() + op_name[1:]
+                ),
+            )
         else:
             shapes = {
                 "forecast": FORECAST,
@@ -631,7 +689,7 @@ def refusal_builder(tid: str, kind: str):
             slots.update({k: rng.choice(v) for k, v in SQL_PARTS.items()})
             slots["n"] = str(rng.choice([0, 1, 10, 50, 100, 500]))
             refusal = "unsupported" if kind in ("sql", "injection") else "out_of_scope"
-            answer = respond(refusal, REFUSAL_TEXT[kind])
+            answer = respond(refusal, refusal_text(rng, kind))
         return example(tid, "refusal", sentence(ctx, rng, shape, **slots), answer, "respond")
 
     return build
@@ -689,6 +747,7 @@ def injection_with_data(rng: random.Random, ctx: Ctx, split: str) -> Example | N
 FOLLOW_METRIC = ["What about {metric}?", "And {metric}?", "Same for {metric}.",
                  "Now show {metric}.", "How about {metric} instead?"]  # fmt: skip
 FOLLOW_PERIOD = ["How about {period}?", "Only {period}.", "And {period}?",
+                 "{period_cap} instead.", "Make that {period}.",
                  "What about {period} instead?", "Same thing but {period}."]  # fmt: skip
 FOLLOW_SWAP = ["And {place}?", "Now do {place}.", "What about {place}?", "Same for {place}."]
 FOLLOW_ADD = ["Compare that with {place}.", "Add {place}.", "Include {place} too.",
@@ -710,9 +769,17 @@ FOLLOW_RANK = [("Show the bottom {n} instead.", {"order": "asc", "limit": "n"}),
                ("Now rank by dollar change.", {"rank_by": "change"}),
                ("And in percent terms?", {"rank_by": "pct_change"}),
                ("Flip the order.", {"order": "flip"}),
+               ("Give me the median of those cities instead.",
+                {"operation": "aggregate", "aggregate": "median", "rank_by": None}),
+               ("And the average across those cities?",
+                {"operation": "aggregate", "aggregate": "avg", "rank_by": None}),
+               ("How about the maximum value instead?",
+                {"operation": "aggregate", "aggregate": "max", "rank_by": None}),
+               ("Show the monthly average instead.",
+                {"operation": "aggregate", "aggregate": "avg", "rank_by": None}),
                ("Just the top {n}, please.", {"limit": "n"})]  # fmt: skip
 FOLLOW_FORECAST = [
-    "Will that keep going next year?",
+    "Is that trend likely to continue?",
     "So what happens next?",
     "Predict where it goes from here.",
     "Is it going to keep rising?",
@@ -733,13 +800,22 @@ def prior_turn(
     p = period(rng, ctx, metric, ("year", "range", "since"))
     plan = with_period({"metric": metric, "cities": [ref(city)], "operation": operation}, p)
     shape = rng.choice(STD_SHAPES[operation][:-1])
+    # Data v2: the earlier question often names only the city (e.g. after a clarification
+    # resolved it), so the planner must take the state from the context, not the history text.
+    roll = rng.random()
+    if roll < 0.4:
+        named = city.name
+    elif roll < 0.55:
+        named = f"{city.name}, {STATE_NAMES[city.state]}"
+    else:
+        named = f"{city.name}, {city.state}"
     slots = {"metric": word, "metric_mod": rng.choice(METRIC_MODS[metric]),
-             "place": f"{city.name}, {city.state}", "period": p.phrase}  # fmt: skip
+             "place": named, "period": p.phrase}  # fmt: skip
     question = ctx.grammar.sentence(shape, rng, slots)
     vplan = ctx.validator.validate(plan)
     if not isinstance(vplan, ValidatedPlan):
         return None
-    return question, plan, client_state(vplan)
+    return question, plan, without_county_sometimes(rng, client_state(vplan))
 
 
 def client_state(vplan: ValidatedPlan) -> dict[str, Any]:
@@ -748,6 +824,17 @@ def client_state(vplan: ValidatedPlan) -> dict[str, Any]:
     pass it to the agent. Using the raw agent state would add "state_filter": null and other
     defaults that never appear at inference."""
     return ConversationState.model_validate(_state_from(vplan)).model_dump(exclude_defaults=True)
+
+
+def without_county_sometimes(rng: random.Random, state: dict[str, Any]) -> dict[str, Any]:
+    """The agent's own state carries each city's county, but hand-written clients (and the eval
+    cases) often don't; train on both forms."""
+    if rng.random() < 0.5 and state.get("cities"):
+        state = {
+            **state,
+            "cities": [{k: v for k, v in c.items() if k != "county"} for c in state["cities"]],
+        }
+    return state
 
 
 def history_for(question: str) -> list[dict[str, str]]:
@@ -789,7 +876,10 @@ def follow_builder(kind: str):
             n = rng.choice([3, 5, 10])
             plan = dict(prior_plan)
             for k, v in overrides.items():
-                plan[k] = n if v == "n" else ("asc" if v == "flip" else v)
+                if v is None:
+                    plan.pop(k, None)
+                else:
+                    plan[k] = n if v == "n" else ("asc" if v == "flip" else v)
             question = shape.format(n=n)
             return example(
                 tid,
@@ -818,9 +908,9 @@ def follow_builder(kind: str):
             question = shape.format(metric=rng.choice(METRIC_WORDS[new_metric]))
             plan["metric"] = new_metric
         elif kind == "period":
-            p = period(rng, ctx, plan["metric"], ("year", "since", "range"))
+            p = period(rng, ctx, plan["metric"], ("since", "since", "year", "range"))
             shape, _ = pick(FOLLOW_PERIOD, split, rng)
-            question = shape.format(period=p.phrase)
+            question = shape.format(period=p.phrase, period_cap=p.phrase[:1].upper() + p.phrase[1:])
             plan.pop("start_month", None)
             plan.pop("end_month", None)
             with_period(plan, p)
@@ -845,7 +935,7 @@ def follow_builder(kind: str):
                 tid,
                 "follow_up",
                 shape,
-                respond("out_of_scope", REFUSAL_TEXT["forecast"]),
+                respond("out_of_scope", refusal_text(rng, "forecast")),
                 "respond",
                 history=history_for(q0),
                 state=state,
@@ -923,6 +1013,86 @@ def retry_builder(kind: str):
     return build
 
 
+# ---- methodology questions -> search_knowledge (data v2) ------------------------------------
+# Data v1 had none, so the fine-tuned model stopped using search_knowledge at all (methodology
+# 73% -> 27%). Each topic maps to a short retrieval query; wording varies per topic.
+
+METHODOLOGY_TOPICS = [
+    ("ZHVI definition", [
+        "Can you explain what {zhvi} measures?", "Define the Zillow Home Value Index.",
+        "What does ZHVI stand for?", "In plain terms, what is the home value index?",
+        "What exactly is {zhvi}?"]),
+    ("ZORI definition", [
+        "What does ZORI stand for?", "Explain the Zillow Observed Rent Index.",
+        "What does the rent index actually track?", "In plain terms, what is {zori}?",
+        "Define ZORI for me."]),
+    ("ZHVI methodology", [
+        "How does Zillow compute {zhvi}?", "What's the methodology behind the home value index?",
+        "How are home values estimated for the index?", "Which homes go into the ZHVI calculation?",
+        "Walk me through how ZHVI is built."]),
+    ("ZORI methodology", [
+        "How is the rent index calculated?", "What data does Zillow use to build ZORI?",
+        "Explain how observed rents become an index.", "How does Zillow construct {zori}?",
+        "Which listings feed into ZORI?"]),
+    ("smoothing seasonal adjustment", [
+        "Why is the index smoothed?", "What does seasonally adjusted mean here?",
+        "Are these numbers smoothed or raw?", "How does seasonal adjustment change the values?",
+        "What is smoothing in a home value index?"]),
+    ("ZHVI tier percentile", [
+        "What is the middle tier of ZHVI?", "What does the 33rd–67th percentile range refer to?",
+        "Why does ZHVI use a price tier?", "Which homes count as mid-tier in ZHVI?",
+        "What do the ZHVI tiers mean?"]),
+    ("ZHVI vs ZORI", [
+        "How do ZHVI and ZORI differ?", "Is the rent index comparable to the home value index?",
+        "When should I use ZORI instead of ZHVI?",
+        "Can I compare rent and home value indices directly?",
+        "What separates the home value index from the rent index?"]),
+    ("ZHVI sale price appraisal limitations", [
+        "Is ZHVI what a house actually sold for?", "Can the home value index replace an appraisal?",
+        "Does ZHVI tell me my home's price?", "Is the index the same as a listing price?",
+        "How reliable is ZHVI for a single property?"]),
+    ("data update frequency", [
+        "How often is the data refreshed?", "How current are these numbers?",
+        "When is the index updated each month?", "What's the publication lag for ZHVI?",
+        "How frequently does Zillow update ZORI?"]),
+    ("city geography definition", [
+        "What counts as a city in this data?", "Are cities defined by city limits?",
+        "Which geographic boundaries do the city series use?",
+        "Does a city here include its suburbs?", "How are city regions defined?"]),
+    ("missing months data coverage", [
+        "Why do some cities lack data for certain months?", "Why are there gaps in the series?",
+        "Why doesn't every city have rent data?", "What causes missing months in the index?",
+        "Why does coverage start later for some places?"]),
+    ("ZORI housing types", [
+        "Does ZORI include apartments?", "Which rental types are in the rent index?",
+        "Are single-family rentals part of ZORI?", "Does the rent index cover multifamily units?",
+        "What kinds of homes does ZORI track?"]),
+    ("ZORI asking rent observed rent", [
+        "Is ZORI based on asking rents?", "Does the rent index use signed lease prices?",
+        "Are these listing rents or actual rents paid?", "Where do ZORI's rent figures come from?",
+        "Is observed rent the same as contract rent?"]),
+]  # fmt: skip
+METHODOLOGY_PARTS = {"zhvi": ["ZHVI", "the home value index", "Zillow's home value index"],
+                     "zori": ["ZORI", "the rent index", "Zillow's rent index"]}  # fmt: skip
+METHODOLOGY_LEADS = ["", "", "Quick question: ", "I'm new to housing data. ",
+                     "Help me understand: ", "Before I read the numbers, ",
+                     "Could you tell me: "]  # fmt: skip
+METHODOLOGY_TAILS = ["", "", " In simple terms, please.", " Briefly.",
+                     " I want to interpret the charts correctly."]  # fmt: skip
+
+
+def methodology(rng: random.Random, ctx: Ctx, split: str) -> Example | None:
+    query, shapes = rng.choice(METHODOLOGY_TOPICS)
+    shape, _ = pick(shapes, split, rng)
+    slots = {k: rng.choice(v) for k, v in METHODOLOGY_PARTS.items()}
+    lead, tail = rng.choice(METHODOLOGY_LEADS), rng.choice(METHODOLOGY_TAILS)
+    if lead.endswith(", ") and shape[1:2].islower():  # keep "ZHVI ..." as is
+        shape = shape[0].lower() + shape[1:]
+    question = add_noise(ctx.grammar.sentence(f"{lead}{shape}{tail}", rng, slots), rng)
+    target = {"call": {"tool": "search_knowledge", "query": query, "top_k": 3}}
+    return example("methodology.search", "methodology", question, target, "search")
+
+
 # ---- registry ---------------------------------------------------------------------------------
 
 TEMPLATES = [
@@ -950,16 +1120,18 @@ TEMPLATES = [
     Template("refusal.injection_with_data", "refusal", injection_with_data),
     *(Template(f"follow.{k}", "follow_up", follow_builder(k))
       for k in ("metric", "period", "swap", "add", "op", "rank", "forecast")),
+    Template("methodology.search", "methodology", methodology),
     *(Template(f"retry.{k}", "retry", retry_builder(k))
       for k in ("scope_both", "scope_neither", "missing_rank_by", "bad_month",
                 "switch_unsupported")),
 ]  # fmt: skip
 
-SCENARIO_SHARES = {
-    "standard": 0.25,
-    "scope": 0.20,
-    "clarify": 0.15,
-    "refusal": 0.15,
-    "follow_up": 0.15,
-    "retry": 0.10,
+SCENARIO_SHARES = {  # data v2: methodology added; follow-ups up (their v1 score fell)
+    "standard": 0.23,
+    "scope": 0.19,
+    "clarify": 0.14,
+    "refusal": 0.14,
+    "follow_up": 0.16,
+    "retry": 0.08,
+    "methodology": 0.06,
 }

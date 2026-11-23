@@ -40,7 +40,7 @@ METRICS_FILENAME = "training_metrics.json"
 DEFAULTS = {
     "learning_rate": 2e-4,
     "warmup_ratio": 0.03,
-    "epochs": 2.0,
+    "epochs": 1.0,  # data 93a8b1a171: dev loss was flat from epoch 1 (0.0373) to 2 (0.0376)
     "batch_size": 4,  # x grad_accum 4 = 16 per step, about 165 steps per epoch
     "grad_accum": 4,
     "lora_r": 16,

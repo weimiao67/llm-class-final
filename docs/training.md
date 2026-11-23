@@ -5,7 +5,7 @@ and scores it on the 200-case eval set. It uses the same account, Region (`us-ea
 setup as [docs/deployment.md](deployment.md).
 
 **Cost:** a training job bills by the second while it runs (`ml.g5.xlarge` is about $1.4/hour).
-The smoke job is about 15–25 minutes, and the full run about 1–1.5 hours. The evaluation endpoint
+The smoke job is about 15–25 minutes, and the full run (1 epoch) about 50–60 minutes. The evaluation endpoint
 afterwards is about $1.5/hour, as in Step 2.
 
 ## 0. Prerequisites
@@ -23,9 +23,9 @@ cd ~/llm-class-final && git pull
 uv run python scripts/build_training_data.py
 ```
 
-It should print `3000 examples → data/training/93a8b1a171`, the version whose report is committed
-in `training/reports/93a8b1a171/`. The build is deterministic. It should also print
-`sha256: {'train.jsonl': '5ce24a52101af8da', 'dev.jsonl': '8f33f206d7018590'}`, the checksums of the
+It should print `3000 examples → data/training/f261a5f4d7`, the version whose report is committed
+in `training/reports/f261a5f4d7/`. The build is deterministic. It should also print
+`sha256: {'train.jsonl': '13e6c28d43a5eab2', 'dev.jsonl': '21fcff46fc41f459'}`, the checksums of the
 reviewed build. A different version or checksum means the code or dataset differs from the reviewed
 one; stop and check before training.
 
@@ -34,7 +34,7 @@ one; stop and check before training.
 `launch_train.py` uses Studio's own `python`, because it needs the `sagemaker` SDK:
 
 ```bash
-python scripts/launch_train.py --data-dir data/training/93a8b1a171 --smoke
+python scripts/launch_train.py --data-dir data/training/f261a5f4d7 --smoke
 ```
 
 It trains on 32 rows for 1 epoch, then still merges and uploads the full 3B model (about 6 GB).
@@ -44,7 +44,7 @@ prints the S3 paths for `model.tar.gz` and `output.tar.gz`.
 
 **Optional but recommended (about 15 minutes, about $0.40):** deploy the smoke model and run the
 endpoint smoke test. This checks the path from merged model to TGI (weights load, the chat
-template is found, constrained decoding works) before spending 1–1.5 hours on the full run. The
+template is found, constrained decoding works) before spending an hour on the full run. The
 smoke model's answers will be poor, since it trained on only 32 rows; only checks 1–4 passing
 matter.
 
@@ -55,10 +55,10 @@ uv run python scripts/smoke_endpoint.py --endpoint final-wm-qwen-lora-smoke
 python scripts/deploy_endpoint.py --delete --name final-wm-qwen-lora-smoke
 ```
 
-## 3. Full training run (about 1–1.5 hours)
+## 3. Full training run (about 50–60 minutes)
 
 ```bash
-python scripts/launch_train.py --data-dir data/training/93a8b1a171
+python scripts/launch_train.py --data-dir data/training/f261a5f4d7
 ```
 
 Defaults (in `training/job/train.py`):
@@ -68,7 +68,7 @@ Defaults (in `training/job/train.py`):
 | LoRA | r 16, alpha 32, dropout 0.05 |
 | Target modules | `q,k,v,o,gate,up,down_proj` |
 | Learning rate | 2e-4, cosine, 3% warmup |
-| Epochs | 2 |
+| Epochs | 1 (data `93a8b1a171`: dev loss was flat from epoch 1 to epoch 2) |
 | Batch size | 4 × 4 gradient accumulation |
 | Precision | bf16, with gradient checkpointing |
 | Loss | final assistant turn only |
@@ -83,8 +83,10 @@ aws s3 cp s3://…/output/output.tar.gz /tmp/ && tar -xzf /tmp/output.tar.gz -C 
   && python -m json.tool /tmp/training_metrics.json | head -40
 ```
 
-Dev loss should fall from epoch 1 to epoch 2. If it rises while training loss keeps falling, the
-model is overfitting: prefer `--epochs 1`.
+Dev loss is reported once per epoch. With the 1-epoch default there is a single value; for a
+`--epochs 2` comparison run, dev loss should still fall in epoch 2. If it stays flat or rises
+while training loss keeps falling (as with data `93a8b1a171`: 0.0373 → 0.0376, training loss
+0.0036), the extra epoch is memorizing, not generalizing.
 
 ## 4. Deploy and evaluate the merged model
 
@@ -96,9 +98,9 @@ python scripts/deploy_endpoint.py --name final-wm-qwen-lora \
   --model-data s3://…/output/model.tar.gz --fallback-instance-types ml.g6.2xlarge ml.g6e.xlarge
 uv run python scripts/smoke_endpoint.py --endpoint final-wm-qwen-lora              # first request
 uv run python scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora \
-  --model-id qwen2.5-3b-lora-93a8b1a171
+  --model-id qwen2.5-3b-lora-f261a5f4d7
 uv run python scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora \
-  --model-id qwen2.5-3b-lora-93a8b1a171 --unconstrained                              # ablation
+  --model-id qwen2.5-3b-lora-f261a5f4d7 --unconstrained                              # ablation
 python scripts/deploy_endpoint.py --delete --name final-wm-qwen-lora
 ```
 
