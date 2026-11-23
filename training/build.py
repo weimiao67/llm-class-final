@@ -162,8 +162,17 @@ class Generator:
 # ---- outputs ---------------------------------------------------------------------------------
 
 
+# Files whose content shapes the examples: the generator itself, the prompt text and retry feedback
+# (agent/prompts.py), and the tool-call schemas behind canonical_json (tools/schemas.py).
+VERSIONED_SOURCES = (
+    *sorted(Path(__file__).parent.glob("*.py")),
+    Path(__file__).parents[1] / "agent" / "prompts.py",
+    Path(__file__).parents[1] / "tools" / "schemas.py",
+)
+
+
 def data_version(seed: int, n: int, dataset_version: str) -> str:
-    code = b"".join(p.read_bytes() for p in sorted(Path(__file__).parent.glob("*.py")))
+    code = b"".join(p.read_bytes() for p in VERSIONED_SOURCES)
     key = f"{seed}|{n}|{dataset_version}|{PROMPT_VERSION}|".encode() + code
     return hashlib.sha256(key).hexdigest()[:10]
 

@@ -19,7 +19,7 @@ from typing import Any
 from pydantic import ValidationError
 
 from agent.orchestrator import _state_from
-from tools.schemas import ToolCall
+from tools.schemas import ConversationState, ToolCall
 from tools.validator import PlanValidator, ValidatedPlan
 from training.grammar import Grammar, add_noise
 from training.pools import STATE_NAMES, City, Pools
@@ -39,8 +39,10 @@ METRIC_MODS = {
     "zhvi": ["home value", "ZHVI", "house price", "home price"],
     "zori": ["rent", "ZORI", "rental price"],
 }  # fmt: skip
+# "highest"/"lowest" are left to rank ("Which Texas city has the highest rent?"); aggregates say
+# "maximum"/"minimum", so the same wording never maps to two operations.
 AGG_WORDS = {"avg": ["average", "mean"], "median": ["median", "typical"],
-             "min": ["minimum", "lowest"], "max": ["maximum", "highest"]}  # fmt: skip
+             "min": ["minimum"], "max": ["maximum"]}  # fmt: skip
 
 PARTS = {
     "show": ["Show", "Show me", "Give me", "Pull up", "Can you show", "I'd like to see", "Display",
@@ -674,7 +676,7 @@ INJECTION_WITH_DATA = [
 
 def injection_with_data(rng: random.Random, ctx: Ctx, split: str) -> Example | None:
     """A real question with an injection attached: analyze the real question only."""
-    base = std_builder(rng.choice(["change", "series", "extrema"]))(rng, ctx, "train")
+    base = std_builder(rng.choice(["change", "series", "extrema"]))(rng, ctx, split)
     shape, _ = pick(INJECTION_WITH_DATA, split, rng)
     q = base.question.rstrip("?.!") + "."
     return example(
@@ -737,7 +739,15 @@ def prior_turn(
     vplan = ctx.validator.validate(plan)
     if not isinstance(vplan, ValidatedPlan):
         return None
-    return question, plan, _state_from(vplan)
+    return question, plan, client_state(vplan)
+
+
+def client_state(vplan: ValidatedPlan) -> dict[str, Any]:
+    """The previous-turn state exactly as a client sends it back: the agent's ``updated_state``
+    validated as ``ConversationState`` with defaults dropped, as api/main.py and the eval runner
+    pass it to the agent. Using the raw agent state would add "state_filter": null and other
+    defaults that never appear at inference."""
+    return ConversationState.model_validate(_state_from(vplan)).model_dump(exclude_defaults=True)
 
 
 def history_for(question: str) -> list[dict[str, str]]:
@@ -788,7 +798,7 @@ def follow_builder(kind: str):
                 analyze(plan),
                 "answer",
                 history=history_for(q0),
-                state=_state_from(vplan),
+                state=client_state(vplan),
             )
 
         metric = rng.choice(["zhvi", "zori"])

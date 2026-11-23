@@ -186,3 +186,37 @@ def test_outputs_and_report_are_written(built, tmp_path):
 def test_every_template_is_registered_once():
     ids = [t.id for t in TEMPLATES]
     assert len(ids) == len(set(ids)) and len(ids) >= 35
+
+
+# ---- review follow-ups --------------------------------------------------------------------------
+
+
+def test_follow_up_context_matches_what_the_api_sends(built, db):
+    from agent.prompts import planner_messages
+    from tools.schemas import ConversationState
+
+    _, items = built
+    follow = [b for b in items if b.example.scenario == "follow_up" and b.example.state]
+    assert follow
+    for b in follow:
+        ex = b.example
+        via_api = ConversationState.model_validate(ex.state).model_dump(exclude_defaults=True)
+        assert ex.state == via_api
+        assert "null" not in b.record["messages"][0]["content"].split("Previous-turn context:")[1]
+        expected = planner_messages(db, ex.question, ex.history, via_api)
+        assert b.record["messages"][: len(expected)] == expected
+
+
+def test_aggregate_wording_never_uses_rank_words():
+    from training.templates import AGG_WORDS
+
+    words = {w for ws in AGG_WORDS.values() for w in ws}
+    assert not words & {"highest", "lowest", "top", "bottom"}
+
+
+def test_data_version_tracks_prompt_and_schema_sources():
+    from training.build import VERSIONED_SOURCES
+
+    names = {p.name for p in VERSIONED_SOURCES}
+    assert {"prompts.py", "schemas.py", "templates.py", "build.py"} <= names
+    assert all(p.exists() for p in VERSIONED_SOURCES)
