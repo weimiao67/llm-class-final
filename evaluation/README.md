@@ -9,6 +9,8 @@ so the question is whether the model picks the right tool and the right analysis
 | Path | Contents |
 |---|---|
 | `cases/v1.jsonl` | 200 hand-written cases, one JSON object per line |
+| `cases/v1.1.jsonl` | v1 with four gold plans corrected to match the city/state policy (see `notes` in each) |
+| `rescore.py` | Re-scores a saved run on a corrected case file, offline; only changed cases are re-scored |
 | `cases/v1_holdout.json` | What Step 3 training data must not contain: eval plans (by meaning), cities, and questions |
 | `holdout.py` | Builds the hold-out file; `Holdout.conflicts(question, plan)` is the check Step 3 runs |
 | `cases.py` | Case schema (`EvalCase`) and loader |
@@ -79,6 +81,12 @@ Methodology cases count on tool selection until the knowledge base exists (Step 
 uv run python scripts/run_eval.py --model oracle   # must score 100%; checks the set itself
 uv run python scripts/run_eval.py --model stub     # offline baseline
 uv run python scripts/run_eval.py --model sagemaker --endpoint <name> --model-id <label>
+```
+
+Re-score saved runs on a corrected case file, with no model calls:
+
+```bash
+uv run python scripts/rescore_eval.py --cases evaluation/cases/v1.1.jsonl evaluation/reports/*/
 ```
 
 Use `--family extrema` or `--limit 20` for quick smoke runs. A `--model-id` with a slash (Hugging

@@ -283,6 +283,30 @@ fine-tuning.
   treat the trailing state as belonging to the last city only, while the prompt rule says a state
   written after a list applies to every city in it.
 
-Corrections are pending a decision. They would be applied to every run's saved outputs alike, and
-the uncorrected v1 scores above stay as reported.
+## Corrected eval set v1.1
+
+`evaluation/cases/v1.1.jsonl` corrects only those four cases, each with a note explaining why.
+Under the policy (never add a state the user didn't write; a state written after a list applies
+to every city in it), all four now expect a clarification. v1 stays frozen, and every v1 number
+above stands as reported.
+
+Every saved run was re-scored on v1.1 offline from its `results.jsonl`, using
+`scripts/rescore_eval.py`, with no new model calls. Only the four changed cases are re-scored, and
+every other case keeps its original score. Execution accuracy is out of 127 cases instead of 131,
+because the corrected cases now expect a clarification rather than data.
+
+| Run | Turn success v1 → v1.1 | Execution accuracy v1 → v1.1 |
+|---|---|---|
+| v0 Llama-3.2-3B, planner-v1 | 31.0% → 31.0% | 16.0% → 15.8% |
+| v1 Llama-3.2-3B, planner-v2 | 37.5% → 38.5% | 27.5% → 28.3% |
+| v1-qwen Qwen2.5-3B base | 55.5% → 54.5% | 51.1% → 50.4% |
+| v2-lora (data v1, 2 epochs) | 84.0% → 86.0% | 84.0% → 86.6% |
+| v2-lora, no constraint | 84.0% → 86.0% | 84.0% → 86.6% |
+| **v3-lora (data v2, 1 epoch)** | **92.5% → 94.5%** | **89.3% → 92.1%** |
+| v3-lora, no constraint | 92.5% → 93.5% | 90.1% → 92.1% |
+
+The corrections don't just favor the fine-tuned models: base Qwen loses a point, because it had
+"passed" these cases by adding states the user never wrote. `multi_city-028` ("Boise, Spokane, WA
+and Salt Lake City", where the state sits mid-list) is left unchanged, since reading it is
+genuinely ambiguous.
 
