@@ -1,0 +1,39 @@
+# The app: agent API on :8000 and Streamlit UI on :8501 (design doc §16.1).
+#
+#   docker compose up --build          # local, stub model, no AWS
+#
+# Settings come from the environment or a git-ignored .env file next to this one:
+#   MODEL_BACKEND=stub|sagemaker, SAGEMAKER_ENDPOINT_NAME, MODEL_ID, AWS_REGION, API_KEY
+# On EC2 (scripts/deploy_app.py), AWS credentials come from the instance role.
+
+services:
+  api:
+    build: {context: ., target: api}
+    image: housing-analyst-api
+    restart: unless-stopped
+    environment:
+      MODEL_BACKEND: ${MODEL_BACKEND:-stub}
+      SAGEMAKER_ENDPOINT_NAME: ${SAGEMAKER_ENDPOINT_NAME:-}
+      MODEL_ID: ${MODEL_ID:-}
+      AWS_REGION: ${AWS_REGION:-us-east-2}
+      API_KEY: ${API_KEY:-}
+    volumes:
+      - ${DATA_DIR:-./data}:/data:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    read_only: true
+    tmpfs: [/tmp]
+
+  ui:
+    build: {context: ., target: ui}
+    image: housing-analyst-ui
+    restart: unless-stopped
+    environment:
+      ANALYST_API_URL: http://api:8000
+      ANALYST_API_KEY: ${API_KEY:-}
+    ports:
+      - "${UI_PORT:-8501}:8501"
+    read_only: true
+    tmpfs: [/tmp, /home/app]
+    depends_on:
+      api: {condition: service_healthy}

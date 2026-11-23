@@ -1,5 +1,7 @@
 # Deployment runbook: baseline endpoint and evaluation (SageMaker Studio)
 
+> To put the app itself on AWS (API + UI on EC2), see [app-deployment.md](app-deployment.md).
+
 This runbook deploys the Step 2 baseline model (`meta-llama/Llama-3.2-3B-Instruct`) to a SageMaker
 real-time endpoint, checks it, scores it on the 200-case eval set, and deletes it. It uses the same
 account, Region (`us-east-2`), and Studio setup as assignments A4–A8.

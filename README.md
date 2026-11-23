@@ -6,7 +6,7 @@ results deterministically. The model never writes SQL and never supplies the num
 
 > Status: Step 4 (product). The LoRA-tuned Qwen2.5-3B planner reaches 89.3% execution accuracy on
 > the 200-case eval set (base model: 51.1%), see [docs/evaluation.md](docs/evaluation.md). Done so
-> far: the methodology knowledge base (4a) and the Streamlit UI (4b); next, app deployment (4c).
+> far: the methodology knowledge base (4a) and the Streamlit UI (4b), and app deployment on EC2 (4c).
 
 ## Quick start (no AWS needed)
 
@@ -56,6 +56,16 @@ trace** (dataset version, resolved cities, the SQL and its parameters, the model
 sources, and the tool events with timings). With `MODEL_BACKEND=stub`, the example questions are
 answered by fixed rules, so the whole UI works without AWS.
 
+## Run in containers
+
+```bash
+docker compose up --build             # API on :8000, UI on :8501; stub model, ./data mounted read-only
+```
+
+Two images are built from one [Dockerfile](Dockerfile): `api` (no Streamlit) and `ui` (only the UI
+packages). Settings come from the environment or a git-ignored `.env`. To deploy on AWS (one EC2
+instance calling the SageMaker endpoint), see [docs/app-deployment.md](docs/app-deployment.md).
+
 ## Layout
 
 | Path | Role |
@@ -78,6 +88,8 @@ answered by fixed rules, so the whole UI works without AWS.
 | `ui/` | Streamlit UI (`app.py`), its API client (`client.py`), and display helpers (`view.py`) |
 | `evaluation/` | Frozen eval set (200 cases), oracle, scorer, runner — see [evaluation/README.md](evaluation/README.md) |
 | `scripts/run_eval.py` | Score a model backend (`oracle`, `stub`, `sagemaker`) on the eval set |
+| `Dockerfile`, `docker-compose.yml` | Container images (`api`, `ui`) and the two-service app |
+| `scripts/deploy_app.py` | Deploy / check / stop / tear down the app on EC2 — see [docs/app-deployment.md](docs/app-deployment.md) |
 | `scripts/deploy_endpoint.py` | Deploy / check / delete the SageMaker TGI endpoint — see [docs/deployment.md](docs/deployment.md) |
 | `scripts/smoke_endpoint.py` | Check a live endpoint against the decoding settings the agent relies on |
 | `docs/evaluation.md` | Evaluation results so far (baseline v0, the next runs) |
