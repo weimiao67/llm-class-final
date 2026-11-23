@@ -118,7 +118,10 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
                 body["model"] = check()
                 ready_now = body["model"].get("status") == "InService"
             except Exception as exc:  # report, don't crash the readiness check
-                body["model"] = {"status": "unreachable", "error": type(exc).__name__}
+                # The AWS error code tells "no such endpoint" (ValidationException) apart from
+                # "the role may not call it" (AccessDeniedException); both are ClientErrors.
+                code = getattr(exc, "response", {}).get("Error", {}).get("Code")
+                body["model"] = {"status": "unreachable", "error": code or type(exc).__name__}
                 ready_now = False
         body["status"] = "ready" if ready_now else "not_ready"
         return JSONResponse(body, status_code=200 if ready_now else 503)

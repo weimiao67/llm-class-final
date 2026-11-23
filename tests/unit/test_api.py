@@ -119,3 +119,20 @@ def test_updated_state_round_trips_through_the_api(make_client):
         assert state["cities"][0]["city"] == "Mead"
         follow_up = {"question": "Rank Colorado cities", "state": state}
         assert c.post("/v1/ask", json=follow_up).status_code == 200
+
+
+def test_ready_reports_the_aws_error_code(make_client):
+    """A missing endpoint and a denied call are both ClientErrors; the code tells them apart."""
+
+    class Missing(StubModelClient):
+        def health(self):
+            from botocore.exceptions import ClientError
+
+            raise ClientError(
+                {"Error": {"Code": "ValidationException", "Message": "Could not find endpoint"}},
+                "DescribeEndpoint",
+            )
+
+    with make_client(model=Missing()) as c:
+        model = c.get("/ready").json()["model"]
+    assert model == {"status": "unreachable", "error": "ValidationException"}

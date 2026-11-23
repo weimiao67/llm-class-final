@@ -300,3 +300,18 @@ def test_non_json_responses_become_api_errors():
 def test_negative_changes_are_signed_in_tables():
     df = view.rows_frame({"rows": [{"change": -16537.1}, {"change": 250.0}]})
     assert list(df["change"]) == ["−$16,537", "+$250"]
+
+
+def test_status_line_explains_endpoint_errors():
+    base = {"status": "not_ready", "model_id": "m", "dataset_version": "v"}
+
+    def line(error):
+        return view.status_line({**base, "model": {"status": "unreachable", "error": error}})[1]
+
+    assert line("ValidationException").startswith("Model endpoint not deployed")
+    assert line("AccessDeniedException").startswith(
+        "Model endpoint not allowed for this app's role"
+    )
+    assert line("EndpointConnectionError").startswith(
+        "Model endpoint unreachable (EndpointConnectionError)"
+    )
