@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pydantic import ValidationError
+
 from housing.db import HousingDB
+from tools.validator import field_errors
 
 PROMPT_VERSION = "planner-v2"
 
@@ -125,6 +128,12 @@ RETRY_INSTRUCTION = (
     'correlation), call respond with kind "unsupported" (or "out_of_scope" for '
     "forecasts) and name what is missing. Never answer a different question than the user asked."
 )
+
+
+def invalid_call_payload(exc: ValidationError) -> dict[str, Any]:
+    """Tool-result payload for output that doesn't parse as a valid tool call. The agent and the
+    Step 3 training data both build retry feedback with this, so they match exactly."""
+    return {"error": "invalid_tool_call", "errors": field_errors(exc)}
 
 
 def retry_message(payload: dict[str, Any]) -> dict[str, str]:

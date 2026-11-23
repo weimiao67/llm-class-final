@@ -246,3 +246,13 @@ def test_planner_prompt_v2_states_scope_and_tool_rules(db):
     assert "Never use it to get values" in system
     agent, _ = make(db, [DENVER_2025, GOOD_ANSWER])
     assert agent.run_turn("Denver 2025?").prompt_version == "planner-v2"
+
+
+def test_unconstrained_agent_plans_without_the_schema(db):
+    model = ScriptedModelClient([DENVER_2025, GOOD_ANSWER])
+    r = Agent(db, model, constrained=False).run_turn("Denver 2025?")
+    assert r.kind == "answer"
+    assert [(c["profile"], c["schema"]) for c in model.calls] == [
+        ("plan", False),
+        ("answer", False),
+    ]

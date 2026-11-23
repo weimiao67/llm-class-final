@@ -298,3 +298,18 @@ def test_results_keep_raw_planner_outputs_plan_and_trace(db, tmp_path):
     )
     saved = json.loads((tmp_path / "run" / "results.jsonl").read_text().splitlines()[0])
     assert saved["planner_outputs"][0] == bad
+
+
+def test_unconstrained_run_is_labeled_in_the_report(db, tmp_path):
+    results = run_eval(FIXTURE_CASES[:1], db, OracleModelClient, constrained=False)
+    report = write_report(
+        tmp_path / "u",
+        results,
+        model_id="m",
+        db=db,
+        cases_file="f",
+        knowledge_base=False,
+        constrained=False,
+    )
+    assert report["meta"]["decoding"] == "unconstrained"
+    assert "planning: unconstrained" in (tmp_path / "u" / "report.md").read_text()

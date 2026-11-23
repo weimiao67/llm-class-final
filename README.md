@@ -4,9 +4,9 @@ A small language model plans analyses of Zillow city-level home values (ZHVI) an
 trusted code validates each plan, compiles it to parameterized DuckDB SQL, and computes the
 results deterministically. The model never writes SQL and never supplies the numbers.
 
-> Status: Step 2 in progress — agent loop, SageMaker client, and API work end to end with the
-> stub model, and the 200-case eval set scores any model backend. Next: endpoint deployment and
-> baseline results. UI and RAG are Step 4.
+> Status: Step 3 in progress. Baselines on the 200-case eval set: Qwen2.5-3B-Instruct reaches
+> 51.1% execution accuracy (Llama-3.2-3B: 27.5%), see [docs/evaluation.md](docs/evaluation.md).
+> Now: LoRA training data for the Qwen planner ([training/](training/README.md)).
 
 ## Quick start (no AWS needed)
 
@@ -63,6 +63,8 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `scripts/deploy_endpoint.py` | Deploy / check / delete the SageMaker TGI endpoint — see [docs/deployment.md](docs/deployment.md) |
 | `scripts/smoke_endpoint.py` | Check a live endpoint against the decoding settings the agent relies on |
 | `docs/evaluation.md` | Evaluation results so far (baseline v0, the next runs) |
+| `training/` | Step 3 planner training data: phrase grammar, filters, train/dev split — see [training/README.md](training/README.md) |
+| `scripts/build_training_data.py` | Build the training data and its report |
 
 ## Example
 

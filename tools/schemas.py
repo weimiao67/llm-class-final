@@ -7,6 +7,7 @@ period covered) live in :mod:`tools.validator`.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 from typing import Annotated, Any, Literal
 
@@ -197,6 +198,13 @@ class QueryArtifact(BaseModel):
     chart: dict[str, Any] | None = None
     warnings: list[str] = []
     dataset_version: str
+
+
+def canonical_json(call: ToolCall | dict[str, Any]) -> str:
+    """The exact text a planner should emit for ``call``: validated, default and null fields
+    omitted, keys in schema order (the order constrained decoding generates them in)."""
+    model = call if isinstance(call, ToolCall) else ToolCall.model_validate(call)
+    return json.dumps(model.model_dump(mode="json", exclude_defaults=True))
 
 
 def tool_call_json_schema() -> dict[str, Any]:

@@ -7,6 +7,7 @@ faithfulness check rejects answers whose numbers are not in the result.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 from typing import Any, Literal
@@ -19,6 +20,7 @@ from agent.model_clients.base import ModelClient, ModelOutput
 from agent.prompts import (
     PROMPT_VERSION,
     answer_messages,
+    invalid_call_payload,
     planner_messages,
     retry_message,
 )
@@ -35,7 +37,7 @@ from tools.schemas import (
     ToolError,
     decoding_schema,
 )
-from tools.validator import PlanValidator, ValidatedPlan, field_errors
+from tools.validator import PlanValidator, ValidatedPlan
 
 log = logging.getLogger(__name__)
 
@@ -123,8 +125,11 @@ class Agent:
         knowledge: KnowledgeBase | None = None,
         validator: PlanValidator | None = None,
         turn_timeout_s: float = TURN_TIMEOUT_S,
+        constrained: bool = True,
     ):
         self.turn_timeout_s = turn_timeout_s
+        # False = plan without the JSON-schema grammar (ablation rows); validation is unchanged.
+        self.constrained = constrained
         self.db = db
         self.model = model
         self.knowledge = knowledge
@@ -170,6 +175,8 @@ class Agent:
         retries = 0
         for step in range(1, MAX_PLANNER_CALLS + 1):
             profile = decoding.PLAN if retries == 0 else decoding.PLAN_RETRY
+            if not self.constrained:
+                profile = dataclasses.replace(profile, constrained=False)
             out = self._complete(turn, messages, profile, self._schema)
             messages = [*messages, {"role": "assistant", "content": out.text}]
 
@@ -180,9 +187,7 @@ class Agent:
                 turn.event(step, "planner", "retry", 0, "invalid tool call")
                 if retries > MAX_PLAN_RETRIES:
                     return self._give_up(turn, state)
-                messages.append(
-                    retry_message({"error": "invalid_tool_call", "errors": field_errors(exc)})
-                )
+                messages.append(retry_message(invalid_call_payload(exc)))
                 continue
 
             if isinstance(call, RespondCall):
