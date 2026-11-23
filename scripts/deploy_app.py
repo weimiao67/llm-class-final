@@ -37,7 +37,9 @@ DEFAULT_INSTANCE_TYPE = "t3.small"  # 2 vCPU, 2 GiB: enough for DuckDB over ~40 
 REPO_URL = "https://github.com/weimiao67/llm-class-final.git"
 API_KEY_PARAM = "/llm-final/api-key"
 DATA_PREFIX = "llm-final/app-data"  # s3://<bucket>/<prefix>/<dataset version>/...
-AMI_PARAM = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
+# Latest Amazon Linux 2023 image per CPU architecture (EC2 name -> SSM public parameter suffix).
+AMI_PARAM = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-{arch}"
+AMI_ARCHES = {"x86_64": "x86_64", "arm64": "arm64"}
 PORTS = {"ui": 8501, "api": 8000}
 MIN_CIDR_PREFIX = 16  # refuse rules that open the app to (nearly) the whole internet
 SSM_CORE_POLICY = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"  # Session Manager shell
@@ -293,8 +295,23 @@ def upload_data(s3, data_dir: Path, bucket: str) -> str:
     return version
 
 
-def latest_ami(ssm) -> str:
-    return ssm.get_parameter(Name=AMI_PARAM)["Parameter"]["Value"]
+def ami_param(arch: str) -> str:
+    if arch not in AMI_ARCHES:
+        raise ValueError(f"no Amazon Linux 2023 image for architecture {arch!r}")
+    return AMI_PARAM.format(arch=AMI_ARCHES[arch])
+
+
+def instance_arch(ec2, instance_type: str) -> str:
+    """The instance type's CPU architecture, so the image matches it (t3 → x86_64, t4g → arm64)."""
+    info = ec2.describe_instance_types(InstanceTypes=[instance_type])["InstanceTypes"][0]
+    arches = info["ProcessorInfo"]["SupportedArchitectures"]
+    return next((a for a in ("x86_64", "arm64") if a in arches), arches[0])
+
+
+def latest_ami(ssm, ec2, instance_type: str) -> str:
+    return ssm.get_parameter(Name=ami_param(instance_arch(ec2, instance_type)))["Parameter"][
+        "Value"
+    ]
 
 
 def run_instance(
@@ -343,15 +360,20 @@ def cmd_check(c, args) -> int:
     """Try each permission `up` needs, without creating anything."""
     account = c["sts"].get_caller_identity()["Account"]
     bucket = args.bucket or default_bucket(account)
-    results: list[tuple[str, bool, str]] = []
+    results: list[tuple[str, str, str]] = []  # (label, OK | NO | ??, detail)
 
     def probe(label: str, fn, ok_codes=("DryRunOperation",)):
         try:
             fn()
-            results.append((label, True, "ok"))
+            results.append((label, "OK", "ok"))
         except Exception as exc:  # report every probe, don't stop at the first
             code = error_code(exc)
-            results.append((label, code in ok_codes, code))
+            results.append((label, "OK" if code in ok_codes else "NO", code))
+
+    def ami():
+        return latest_ami(c["ssm"], c["ec2"], args.instance_type)
+
+    profile = args.instance_profile or (NAME if _profile_exists(c["iam"]) else None)
 
     probe(
         "S3 write to the data prefix",
@@ -362,7 +384,7 @@ def cmd_check(c, args) -> int:
         lambda: c["ssm"].get_parameter(Name=API_KEY_PARAM),
         ok_codes=("ParameterNotFound",),
     )
-    probe("SSM read the AMI id", lambda: latest_ami(c["ssm"]))
+    probe("SSM read the AMI id", ami)
     probe(
         "IAM read the app role",
         lambda: c["iam"].get_role(RoleName=NAME),
@@ -375,14 +397,20 @@ def cmd_check(c, args) -> int:
             GroupName=NAME, Description="check", VpcId=default_vpc(c["ec2"]), DryRun=True
         ),
     )
+    # With the instance profile, the dry run also checks iam:PassRole on its role, which
+    # Studio's SageMaker policy usually grants only for SageMaker roles.
+    launch = {"IamInstanceProfile": {"Name": profile}} if profile else {}
     probe(
-        "EC2 launch an instance (dry run)",
+        "EC2 launch an instance with the app role (dry run)"
+        if profile
+        else "EC2 launch an instance (dry run, without the role)",
         lambda: c["ec2"].run_instances(
-            ImageId=latest_ami(c["ssm"]),
+            ImageId=ami(),
             InstanceType=args.instance_type,
             MinCount=1,
             MaxCount=1,
             DryRun=True,
+            **launch,
         ),
     )
     probe(
@@ -390,16 +418,36 @@ def cmd_check(c, args) -> int:
         lambda: c["sagemaker"].describe_endpoint(EndpointName=args.endpoint),
         ok_codes=("ValidationException",),
     )
-    for label, ok, detail in results:
-        print(f"{'OK  ' if ok else 'NO  '} {label}: {detail}")
-    if all(ok for _, ok, _ in results):
-        print("\nAll checks passed; run `up`.")
-        return 0
+    # Writes that have no dry run: AWS only answers them by doing them.
+    unchecked = ["SSM create the API key (ssm:PutParameter)"]
+    if not profile:
+        unchecked += ["IAM create the app role (iam:CreateRole, iam:PutRolePolicy, ...)",
+                      "EC2 pass the app role to the instance (iam:PassRole)"]  # fmt: skip
+    results += [(label, "??", "not checkable before it exists") for label in unchecked]
+    for label, mark, detail in results:
+        print(f"{mark}   {label}: {detail}")
+    if any(mark == "NO" for _, mark, _ in results):
+        print(f"\nSome steps are denied for this role. {CONSOLE_HINT}")
+        return 1
     print(
-        "\nSome steps are denied for this role. See docs/deployment.md, 'App on EC2 from the "
-        "console', for doing those steps in the AWS console instead."
+        "\nEverything that can be checked is allowed. Lines marked ?? are tried for real by `up`;"
+        f" if `up` stops there, it says which permission is missing. {CONSOLE_HINT} Re-running"
+        " `up` after a partial run is safe."
     )
-    return 1
+    return 0
+
+
+CONSOLE_HINT = (
+    "See docs/app-deployment.md, 'From the console', for doing those steps in the AWS console."
+)
+
+
+def _profile_exists(iam) -> bool:
+    try:
+        iam.get_instance_profile(InstanceProfileName=NAME)
+        return True
+    except Exception:  # missing, or IAM reads denied: either way, don't dry-run with it
+        return False
 
 
 def cmd_up(c, args) -> int:
@@ -424,7 +472,7 @@ def cmd_up(c, args) -> int:
         try:
             inst = run_instance(
                 c["ec2"],
-                ami=latest_ami(c["ssm"]),
+                ami=latest_ami(c["ssm"], c["ec2"], args.instance_type),
                 instance_type=args.instance_type,
                 group_id=group_id,
                 profile=profile,
@@ -586,7 +634,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.command in ("up", "allow") and not args.allow_cidr:
-        parser.error(f"{args.command} needs --allow-cidr <your-ip>/32 (see `curl -s ifconfig.me`)")
+        parser.error(f"{args.command} needs --allow-cidr <your-ip>/32 (see `curl -s https://checkip.amazonaws.com`)")
     try:
         if args.allow_cidr:
             check_cidr(args.allow_cidr)

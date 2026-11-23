@@ -183,3 +183,94 @@ def test_api_image_installs_no_ui_or_dev_groups():
     api_stage = dockerfile.split("AS api\n", 1)[1].split("\nFROM ", 1)[0]
     assert "uv sync --locked --no-default-groups --no-install-project" in api_stage
     assert "--group" not in api_stage
+
+
+# ---- PR #9 review follow-ups --------------------------------------------------------------------
+
+
+class AWSError(Exception):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.response = {"Error": {"Code": code}}
+
+
+def fake_clients(*, profile_exists: bool, launch_error: str = "DryRunOperation"):
+    ec2, iam, ssm = MagicMock(), MagicMock(), MagicMock()
+    ec2.describe_vpcs.return_value = {"Vpcs": [{"VpcId": "vpc-1"}]}
+    ec2.describe_instance_types.return_value = {
+        "InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["x86_64", "i386"]}}]
+    }
+    ec2.create_security_group.side_effect = AWSError("DryRunOperation")
+    ec2.run_instances.side_effect = AWSError(launch_error)
+    iam.get_role.side_effect = AWSError("NoSuchEntity")
+    if not profile_exists:
+        iam.get_instance_profile.side_effect = AWSError("NoSuchEntity")
+
+    def get_parameter(Name, **kwargs):
+        if Name == app.API_KEY_PARAM:
+            raise AWSError("ParameterNotFound")
+        return {"Parameter": {"Value": "ami-123"}}
+
+    ssm.get_parameter.side_effect = get_parameter
+    sts = MagicMock()
+    sts.get_caller_identity.return_value = {"Account": ACCOUNT}
+    return {"ec2": ec2, "iam": iam, "ssm": ssm, "s3": MagicMock(), "sts": sts,
+            "sagemaker": MagicMock()}  # fmt: skip
+
+
+def check_args(**overrides):
+    defaults = {
+        "bucket": None,
+        "instance_profile": None,
+        "instance_type": "t3.small",
+        "endpoint": "e",
+    }
+    return SimpleNamespace(**(defaults | overrides))
+
+
+def test_check_dry_runs_the_launch_with_the_role_once_it_exists(capsys):
+    clients = fake_clients(profile_exists=True)
+    assert app.cmd_check(clients, check_args()) == 0
+    kwargs = clients["ec2"].run_instances.call_args.kwargs
+    assert kwargs["DryRun"] is True and kwargs["IamInstanceProfile"] == {"Name": app.NAME}
+    assert kwargs["ImageId"] == "ami-123"
+    out = capsys.readouterr().out
+    assert "iam:PassRole" not in out  # checked by the dry run, not listed as unchecked
+
+
+def test_check_reports_a_passrole_denial(capsys):
+    clients = fake_clients(profile_exists=True, launch_error="UnauthorizedOperation")
+    assert app.cmd_check(clients, check_args()) == 1
+    out = capsys.readouterr().out
+    assert "NO   EC2 launch an instance with the app role (dry run): UnauthorizedOperation" in out
+    assert "docs/app-deployment.md, 'From the console'" in out
+
+
+def test_check_never_claims_unprobed_writes_passed(capsys):
+    clients = fake_clients(profile_exists=False)
+    assert app.cmd_check(clients, check_args()) == 0
+    assert "IamInstanceProfile" not in clients["ec2"].run_instances.call_args.kwargs
+    out = capsys.readouterr().out
+    assert "??   EC2 pass the app role to the instance (iam:PassRole)" in out
+    assert "??   IAM create the app role" in out and "??   SSM create the API key" in out
+    assert "All checks passed" not in out
+
+
+def test_console_hint_names_a_real_runbook_section():
+    doc = ROOT / "docs" / "app-deployment.md"
+    assert "docs/app-deployment.md" in app.CONSOLE_HINT and doc.exists()
+    assert "## From the console" in doc.read_text()
+
+
+def test_image_matches_the_instance_architecture():
+    assert app.ami_param("x86_64").endswith("al2023-ami-kernel-default-x86_64")
+    assert app.ami_param("arm64").endswith("al2023-ami-kernel-default-arm64")
+    with pytest.raises(ValueError):
+        app.ami_param("i386")
+    ec2, ssm = MagicMock(), MagicMock()
+    ec2.describe_instance_types.return_value = {
+        "InstanceTypes": [{"ProcessorInfo": {"SupportedArchitectures": ["arm64"]}}]
+    }
+    ssm.get_parameter.return_value = {"Parameter": {"Value": "ami-arm"}}
+    assert app.latest_ami(ssm, ec2, "t4g.small") == "ami-arm"
+    assert ssm.get_parameter.call_args.kwargs["Name"] == app.ami_param("arm64")

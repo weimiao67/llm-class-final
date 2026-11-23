@@ -46,8 +46,13 @@ cd ~/llm-class-final && git pull
 python scripts/deploy_app.py check
 ```
 
-Every line should start with `OK`. If some say `NO … AccessDenied`, the Studio role can't do
-that step; see [From the console](#from-the-console-if-check-reports-no) below.
+Each line starts with `OK` (allowed), `NO` (denied), or `??`. A `??` line is a write that AWS can
+only answer by doing it: creating the API key and the role, and passing the role to the instance
+(`iam:PassRole`; once the role exists, `check` tests it with a dry-run launch). `up` tries those
+for real and names the missing permission if one is denied; re-running `up` after that is safe.
+If any line says `NO`, or `up` stops at a `??` step, do that step in the console instead; see
+[From the console](#from-the-console-if-check-reports-no-or-up-is-denied) below. Studio's SageMaker policy usually
+allows `iam:PassRole` only for SageMaker roles, so expect to need the console for at least that.
 
 ## 2. Launch (about 2 minutes, then about 5 minutes of setup)
 
@@ -127,7 +132,7 @@ the API key. The dataset copy in S3 is kept.
 | API answers 401 | Wrong or missing `X-API-Key`; read it again from SSM as in step 3. |
 | `AccessDeniedException` calling the endpoint | The endpoint name differs from `--endpoint` (default `final-wm-qwen-lora`); the role allows only that name. |
 
-## From the console (if `check` reports `NO`)
+## From the console (if `check` reports `NO` or `up` is denied)
 
 Do the denied steps in the AWS console (us-east-2), then let the script do the rest.
 
