@@ -152,3 +152,28 @@ def test_decoding_schema_restricts_states_to_codes():
         AnalysisPlan.model_validate(plan(cities=[{"city": "X", "state": c}]))
         for c in US_STATE_CODES
     )
+
+
+def test_canonical_json_drops_defaults_and_keeps_schema_order():
+    from tools.schemas import canonical_json
+
+    text = canonical_json(
+        {
+            "call": {
+                "tool": "analyze",
+                "plan": {
+                    "operation": "change",
+                    "metric": "zhvi",
+                    "order": "desc",
+                    "limit": 10,
+                    "cities": [{"county": None, "state": "CO", "city": "Pueblo"}],
+                },
+            }
+        }
+    )
+    assert text == (
+        '{"call": {"tool": "analyze", "plan": {"metric": "zhvi", '
+        '"cities": [{"city": "Pueblo", "state": "CO"}], "operation": "change"}}}'
+    )
+    with pytest.raises(ValidationError):
+        canonical_json({"call": {"tool": "analyze", "plan": {"metric": "zhvi"}}})

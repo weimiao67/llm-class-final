@@ -44,6 +44,11 @@ def main() -> int:
     parser.add_argument("--out-dir", type=Path, default=Path("evaluation/reports"))
     parser.add_argument("--family", action="append", help="only run these families")
     parser.add_argument("--limit", type=int, help="only run the first N cases (smoke test)")
+    parser.add_argument(
+        "--unconstrained",
+        action="store_true",
+        help="plan without the JSON-schema grammar (ablation); validation is unchanged",
+    )
     args = parser.parse_args()
 
     cases = load_cases(args.cases)
@@ -70,8 +75,10 @@ def main() -> int:
         mark = "✓" if r.success else "✗"
         print(f"[{i:3d}/{n}] {mark} {r.id:<16} {r.latency_ms:8.0f} ms  {r.question[:60]}")
 
-    results = run_eval(cases, db, factory, progress=progress)
-    run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{safe_name(model_id)}"
+    constrained = not args.unconstrained
+    results = run_eval(cases, db, factory, progress=progress, constrained=constrained)
+    label = model_id if constrained else f"{model_id}-unconstrained"
+    run_id = f"{datetime.now():%Y%m%d-%H%M%S}-{safe_name(label)}"
     report = write_report(
         args.out_dir / run_id,
         results,
@@ -79,6 +86,7 @@ def main() -> int:
         db=db,
         cases_file=str(args.cases),
         knowledge_base=False,
+        constrained=constrained,
     )
     o = report["overall"]
     print(

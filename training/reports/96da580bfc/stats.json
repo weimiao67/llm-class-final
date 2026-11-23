@@ -1,0 +1,111 @@
+{
+  "data_version": "96da580bfc",
+  "seed": 13,
+  "requested": 3000,
+  "dataset_version": "23ccd46a4560",
+  "prompt_version": "planner-v2",
+  "holdout_file": "evaluation/cases/v1_holdout.json",
+  "examples": 3000,
+  "rejected": {
+    "outcome_no_rows": 124,
+    "near_duplicate_of_eval": 100,
+    "duplicate": 33,
+    "holdout_question": 29,
+    "builder_skip": 26,
+    "outcome_no_data": 7,
+    "holdout_plan": 5
+  },
+  "counts": {
+    "scenario": {
+      "standard": 750,
+      "scope": 600,
+      "clarify": 450,
+      "refusal": 450,
+      "follow_up": 450,
+      "retry": 300
+    },
+    "template": {
+      "std.yoy_change": 133,
+      "std.change": 130,
+      "std.extrema": 129,
+      "std.series": 126,
+      "std.coverage": 126,
+      "clarify.multi_state": 116,
+      "clarify.fictional": 116,
+      "clarify.ambiguous_in_state": 115,
+      "std.yoy_asof": 106,
+      "clarify.typo": 103,
+      "scope.rank_decline": 77,
+      "scope.rank_dollar": 77,
+      "scope.state_aggregate": 76,
+      "scope.state_count": 76,
+      "scope.rank_growth": 75,
+      "scope.list_mixed": 74,
+      "follow.add": 74,
+      "scope.rank_value": 73,
+      "follow.op": 73,
+      "scope.list_trailing": 72,
+      "follow.period": 70,
+      "follow.swap": 67,
+      "retry.scope_neither": 67,
+      "retry.switch_unsupported": 64,
+      "follow.metric": 61,
+      "retry.missing_rank_by": 61,
+      "refusal.forecast": 60,
+      "refusal.missing": 59,
+      "retry.scope_both": 59,
+      "refusal.advice": 58,
+      "follow.forecast": 55,
+      "refusal.op": 53,
+      "refusal.injection_with_data": 53,
+      "refusal.sql": 50,
+      "follow.rank": 50,
+      "retry.bad_month": 49,
+      "refusal.modeling": 47,
+      "refusal.injection": 39,
+      "refusal.sql_translate": 31
+    },
+    "split": {
+      "train": 2644,
+      "dev": 356
+    },
+    "expect": {
+      "answer": 2065,
+      "respond": 485,
+      "clarify": 450
+    },
+    "tool": {
+      "analyze": 2515,
+      "respond": 485
+    },
+    "operation": {
+      "change": 597,
+      "series": 500,
+      "rank": 489,
+      "yoy_change": 311,
+      "extrema": 278,
+      "aggregate": 195,
+      "coverage": 145
+    },
+    "metric": {
+      "zhvi": 1519,
+      "zori": 996
+    },
+    "scope": {
+      "cities": 1852,
+      "state_filter": 663
+    },
+    "respond_kind": {
+      "unsupported": 265,
+      "out_of_scope": 220
+    }
+  },
+  "max_similarity_to_eval": {
+    "p50": 0.277,
+    "p95": 0.486,
+    "max": 0.598,
+    "threshold": 0.6
+  },
+  "distinct_question_share": 0.942,
+  "mean_prompt_chars": 3802
+}

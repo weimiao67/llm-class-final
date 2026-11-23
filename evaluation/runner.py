@@ -50,12 +50,15 @@ def run_eval(
     model_factory: ModelFactory,
     knowledge: KnowledgeBase | None = None,
     progress: Callable[[int, int, CaseResult], None] | None = None,
+    constrained: bool = True,
 ) -> list[CaseResult]:
     scorer = Scorer(db, knowledge_available=knowledge is not None)
     results = []
     for i, case in enumerate(cases, start=1):
         model = RecordingClient(model_factory(case))
-        agent = Agent(db, model, knowledge=knowledge, validator=scorer.validator)
+        agent = Agent(
+            db, model, knowledge=knowledge, validator=scorer.validator, constrained=constrained
+        )
         resp = agent.run_turn(
             case.question,
             history=case.history,
@@ -90,7 +93,8 @@ def render_markdown(meta: dict[str, Any], summary: dict[str, Any], results: list
         "",
         f"- Run: `{meta['run_id']}` · cases: `{meta['cases_file']}` ({o['cases']} cases)",
         f"- Dataset `{meta['dataset_version']}` · prompt `{meta['prompt_version']}`"
-        f" · code `{meta['git_sha']}` · knowledge base: {meta['knowledge_base']}",
+        f" · code `{meta['git_sha']}` · knowledge base: {meta['knowledge_base']}"
+        f" · planning: {meta.get('decoding', 'constrained')}",
         "",
         "## Overall",
         "",
@@ -136,6 +140,7 @@ def write_report(
     db: HousingDB,
     cases_file: str,
     knowledge_base: bool,
+    constrained: bool = True,
 ) -> dict[str, Any]:
     out_dir.mkdir(parents=True, exist_ok=True)
     meta = {
@@ -147,6 +152,7 @@ def write_report(
         "git_sha": _git_sha(),
         "cases_file": cases_file,
         "knowledge_base": "available" if knowledge_base else "unavailable",
+        "decoding": "constrained" if constrained else "unconstrained",
     }
     summary = summarize(results)
     (out_dir / "summary.json").write_text(json.dumps({"meta": meta, **summary}, indent=2) + "\n")
