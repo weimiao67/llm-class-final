@@ -19,13 +19,23 @@ dev = [
     "httpx>=0.28,<0.29",
     "ruff>=0.17,<0.18",
 ]
+# Streamlit client (ui/). Kept out of the main dependencies so the API image doesn't carry it.
+ui = [
+    "httpx>=0.28,<0.29",
+    "pandas>=3.1,<4",
+    "plotly>=7.1,<8",
+    "streamlit>=1.67,<2",
+]
+
+[tool.uv]
+default-groups = ["dev", "ui"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["housing", "tools", "agent", "api", "evaluation", "training"]
+packages = ["housing", "tools", "agent", "api", "evaluation", "training", "ui"]
 
 [tool.ruff]
 target-version = "py312"
