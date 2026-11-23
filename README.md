@@ -57,6 +57,8 @@ Interactive API docs: <http://localhost:8000/docs>. Set `API_KEY` to require an 
 | `agent/prompts.py` | Planner and answer-writer prompts (catalog injected) |
 | `agent/orchestrator.py` | Bounded agent loop: plan → validate → execute → answer, with retries |
 | `agent/grounding.py` | Numeric-faithfulness check, template answers, clarification text |
+| `rag/corpus/` | Methodology knowledge base (ZHVI, ZORI, coverage, scope) with source citations |
+| `tools/knowledge.py` | BM25 retrieval over the corpus for `search_knowledge` |
 | `api/main.py` | FastAPI: `POST /v1/ask`, `GET /v1/catalog`, `GET /health`, `GET /ready` |
 | `evaluation/` | Frozen eval set (200 cases), oracle, scorer, runner — see [evaluation/README.md](evaluation/README.md) |
 | `scripts/run_eval.py` | Score a model backend (`oracle`, `stub`, `sagemaker`) on the eval set |
