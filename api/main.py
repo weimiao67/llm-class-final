@@ -145,7 +145,10 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
             else {
                 "version": getattr(agent.knowledge, "version", None),
                 "documents": sorted(
-                    {(c.doc_id, c.title, c.source_url) for c in agent.knowledge.chunks}
+                    {
+                        (c.doc_id, c.title, c.source_url)
+                        for c in getattr(agent.knowledge, "chunks", [])
+                    }  # fmt: skip
                 ),
             },
         }

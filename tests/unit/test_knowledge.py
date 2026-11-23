@@ -126,3 +126,70 @@ def test_api_loads_the_corpus_and_reports_it(db, monkeypatch):
     assert body["kind"] == "answer" and body["sources"]  # no longer "knowledge base unavailable"
     monkeypatch.setenv("RAG_BACKEND", "none")
     assert knowledge_from_env() is None
+
+
+# ---- PR #7 review follow-ups --------------------------------------------------------------------
+
+
+def test_fallback_quotes_whole_sentences():
+    from agent.orchestrator import first_sentences
+
+    text = "First sentence here. Second one is a bit longer. Third sentence would not fit at all."
+    assert first_sentences(text, limit=50) == "First sentence here. Second one is a bit longer."
+    long = "word " * 200
+    out = first_sentences(long, limit=40)
+    assert out.endswith("…") and len(out) <= 41 and not out[:-1].endswith(" ")
+    for passage in BM25KnowledgeBase.from_dir(CORPUS).chunks:
+        assert first_sentences(passage.text)[-1] in ".!?…"
+
+
+def test_catalog_works_with_a_search_only_knowledge_base(db):
+    from fastapi.testclient import TestClient
+
+    from agent.model_clients.stub import StubModelClient
+    from agent.orchestrator import Agent
+    from api.main import create_app
+    from tools.knowledge import Passage
+
+    class SearchOnly:
+        def search(self, query, top_k):
+            return [
+                Passage(
+                    doc_id="d", title="T", section="S", source_url="https://x", text="t.", score=1.0
+                )
+            ]
+
+    with TestClient(create_app(agent=Agent(db, StubModelClient(), knowledge=SearchOnly()))) as c:
+        r = c.get("/v1/catalog")
+    assert r.status_code == 200 and r.json()["knowledge"]["documents"] == []
+
+
+def test_statistical_mean_is_not_folded_into_measure():
+    assert tokenize("the mean of asking rents") == ["mean", "asking", "rent"]
+    assert tokenize("ZHVI definition") == tokenize("ZHVI measures")
+
+
+def test_coverage_document_matches_the_loaded_dataset():
+    """The coverage figures are written into the document; after re-importing newer data, this
+    fails until the document is updated. Needs the real dataset, so it's skipped in CI."""
+    import re
+
+    from housing.db import HousingDB
+
+    data_dir = ROOT / "data"
+    if not (data_dir / "active_version.txt").exists():
+        pytest.skip("real dataset not ingested")
+    db = HousingDB(data_dir)
+    text = (CORPUS / "data_coverage.md").read_text()
+    assert f"dataset version {db.dataset_version}" in text
+    for metric, label in (("zhvi", "home values"), ("zori", "rents")):
+        cov = db.coverage[metric]
+        rounded = f"{round(cov.regions, -2):,}"
+        span = f"{cov.first_month:%B %Y} to {cov.last_month:%B %Y}"
+        section = re.search(
+            rf"{label} \((?:ZHVI|ZORI)\) cover about ([\d,]+) cities from (.*?)\.",
+            " ".join(text.split()),
+            re.I,
+        )
+        assert section, f"no coverage sentence for {label}"
+        assert section.group(1) == rounded and section.group(2) == span

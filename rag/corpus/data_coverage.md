@@ -16,7 +16,8 @@ of one state, which is why the analyst asks which one you mean when a name is am
 
 ## Coverage in this dataset
 
-Home values (ZHVI) cover about 24,200 cities from March 2000 to October 2026. Rents (ZORI) cover
+For dataset version 23ccd46a4560, home values (ZHVI) cover about 24,200 cities from March 2000 to
+October 2026. Rents (ZORI) cover
 about 4,400 cities from January 2015 to October 2026. A city can have home value data but no rent
 data, and a city's series can start later than the index itself.
 

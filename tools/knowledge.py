@@ -66,7 +66,9 @@ HEADING_WEIGHT = 3  # title and section words count this many times
 # "how ZORI is calculated").
 SYNONYMS = {
     **dict.fromkeys(
-        ["definition", "define", "defined", "meaning", "mean", "means", "stand"], "measure"
+        # Not "mean": that is also the statistic ("the mean of asking rents").
+        ["definition", "define", "defined", "meaning", "stand"],
+        "measure",
     ),
     **dict.fromkeys(
         [
