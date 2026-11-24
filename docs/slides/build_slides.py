@@ -405,8 +405,11 @@ def build() -> Path:
         Inches(4.4),
         Inches(3.4),
         "Research question",
-        "Can a LoRA-fine-tuned 3B model, with constrained decoding, plan governed analytical "
-        "queries reliably, measured by execution accuracy on a held-out eval set?",
+        "Can a small model, fine-tuned for this one job, reliably turn a plain-English "
+        "question into the right analysis?\n\n"
+        "How I check: 200 test questions it never saw in training. For each one, run the "
+        "model's plan and the correct plan, and compare the results.",
+        body_size=16,
     )
 
     # 3. Approach
