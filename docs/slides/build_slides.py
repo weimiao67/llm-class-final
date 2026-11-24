@@ -175,7 +175,19 @@ def text_box(
     return box
 
 
-def card(slide, left, top, width, height, title, body, fill="panel", title_color="ink"):
+def card(
+    slide,
+    left,
+    top,
+    width,
+    height,
+    title,
+    body,
+    fill="panel",
+    title_color="ink",
+    body_size=12,
+    body_align=None,
+):
     shape = slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE, left, top, width, height)
     shape.adjustments[0] = 0.08
     shape.fill.solid()
@@ -190,12 +202,16 @@ def card(slide, left, top, width, height, title, body, fill="panel", title_color
     run.text = title
     run.font.size, run.font.bold, run.font.name = Pt(16), True, FONT
     run.font.color.rgb = RGB[title_color if fill == "panel" else "white"]
-    if body:
+    # One paragraph per line: a "\n" inside a run's text is written literally, and PowerPoint
+    # and Google Slides don't break on it, so every line of the body would run together.
+    for line in body.split("\n") if body else []:
         q = frame.add_paragraph()
-        q.alignment = PP_ALIGN.CENTER
+        q.alignment = body_align or PP_ALIGN.CENTER
+        if body_align == PP_ALIGN.LEFT:
+            q.space_before = Pt(6)
         r = q.add_run()
-        r.text = body
-        r.font.size, r.font.name = Pt(12), FONT
+        r.text = line
+        r.font.size, r.font.name = Pt(body_size), FONT
         r.font.color.rgb = RGB["ink2" if fill == "panel" else "white"]
     return shape
 
@@ -282,7 +298,83 @@ def build() -> Path:
         color="ink2",
     )
 
-    # 2. Problem
+    # 2. Project at a glance (for the instructor: what was built, by grading area)
+    n_docs = len(list((ROOT / "docs").glob("*.md")))
+    s = d.slide(
+        "Project at a glance",
+        "One slide that summarizes the whole project, organized by the rubric's three areas. "
+        "Left: the model work (base-model comparison, LoRA fine-tune, validator-checked "
+        "training data, the 200-case eval set, and the result). Middle: the inference "
+        "pipeline and the sampling method, exposed as an API. Right: the AWS deployment, "
+        "the documentation, and the demo. The rest of the talk goes through each in turn.",
+    )
+    text_box(
+        s,
+        L,
+        Inches(1.25),
+        W,
+        Inches(1.0),
+        [
+            "A conversational analyst for U.S. city home values and rents (Zillow ZHVI and "
+            "ZORI). A LoRA-fine-tuned 3B model plans each analysis; trusted code validates "
+            "it, runs it as SQL, and computes every number."
+        ],
+        size=18,
+        color="ink2",
+    )
+    glance = [
+        (
+            "Model · LoRA · evaluation",
+            "• Compared Llama-3.2-3B, Phi-4-mini, and Qwen2.5-3B; fine-tuned Qwen with LoRA "
+            "on SageMaker\n"
+            "• 3,000 synthetic training examples, each checked against the real data and "
+            "kept away from the eval set\n"
+            f"• 200-case frozen eval set with gold plans: execution accuracy {ex_base:.1f}% "
+            f"→ {ex_final:.1f}%, turn success {ts_base:.1f}% → {ts_final:.1f}%",
+        ),
+        (
+            "Inference pipeline · sampling · API",
+            "• Question → typed plan → validation against the data → parameterized SQL "
+            "(DuckDB) → answer\n"
+            "• Planning: greedy, JSON-schema constrained. Answers: T=0.3, top-p 0.9, with "
+            "a check that every number is in the result\n"
+            "• BM25 search over methodology notes; FastAPI endpoint with an API key",
+        ),
+        (
+            "Deployment · docs · demo",
+            "• Model on a SageMaker TGI endpoint; API and Streamlit UI on EC2 with Docker, "
+            "scoped IAM role\n"
+            f"• README and {n_docs} docs: architecture, model, sampling, evaluation, API, "
+            "and runbooks for every AWS step\n"
+            "• Unit tests and CI on every pull request; live demo with a scripted fallback",
+        ),
+    ]
+    cw = Inches(3.9)
+    for i, (title, body) in enumerate(glance):
+        card(
+            s,
+            L + i * (cw + Inches(0.2)),
+            Inches(2.45),
+            cw,
+            Inches(4.1),
+            title,
+            body,
+            fill="panel",
+            body_size=14,
+            body_align=PP_ALIGN.LEFT,
+        )
+    text_box(
+        s,
+        L,
+        Inches(6.75),
+        W,
+        Inches(0.5),
+        ["Code, docs, eval reports, and this deck: github.com/weimiao67/llm-class-final"],
+        size=14,
+        color="ink2",
+    )
+
+    # 3. Problem
     s = d.slide(
         "The problem",
         "Even a simple question needs the right dataset, geography, period, "

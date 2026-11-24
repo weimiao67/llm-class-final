@@ -1,18 +1,18 @@
 # Demo script
 
 An 8–10 minute presentation with a live demo on the deployed app. Slides:
-[slides/housing-analyst.pptx](slides/housing-analyst.pptx) (14 slides, speaker notes on each).
+[slides/housing-analyst.pptx](slides/housing-analyst.pptx) (15 slides, speaker notes on each).
 To use them in Google Slides, upload the file to Google Drive and choose **Open with → Google
 Slides**. To rebuild the deck after changing the numbers or text:
 `uv run --with python-pptx --with matplotlib python docs/slides/build_slides.py`.
 
 | Part | Slides | Time |
 |---|---|---:|
-| Problem and approach | 1–4 | 2 min |
-| Model, training data, sampling | 5–7 | 2 min |
-| Results | 8–9 | 1.5 min |
-| Deployment, then **live demo** | 10–11 | 3 min |
-| One failure fixed, one not; lessons; future work | 12–14 | 1.5 min |
+| Title, project at a glance, problem, approach, trust boundary | 1–5 | 2.5 min |
+| Model, training data, sampling | 6–8 | 1.5 min |
+| Results | 9–10 | 1.5 min |
+| Deployment, then **live demo** | 11–12 | 3 min |
+| One failure fixed, one not; lessons; future work | 13–15 | 1.5 min |
 
 ## 30 minutes before
 
@@ -59,7 +59,7 @@ For each, show the **AI response** tab first, then **Evidence & trace**.
 | 5 | What will Denver rent be next year? | Out of scope: forecasts aren't offered; historical data is | A refusal with an alternative, not an invented forecast |
 | 6 | What is ZORI and how is it smoothed? | Three-month moving average, seasonally adjusted, with source links | `search_knowledge` over the reviewed methodology notes; the sources are clickable |
 
-Then the API directly (slide 11):
+Then the API directly (slide 12):
 
 ```bash
 curl -s http://$DNS:8000/v1/ask -H "X-API-Key: $KEY" -H 'content-type: application/json' \
@@ -70,7 +70,7 @@ curl -s http://$DNS:8000/v1/ask -H "X-API-Key: $KEY" -H 'content-type: applicati
 Point out `kind`, `answer_source: "model"`, the `plan`, `sql.params`, and the `trace`. Without the
 key, the same request returns 401.
 
-**The known miss (slide 12)**, optional and only if there's time: in a new conversation, ask
+**The known miss (slide 13)**, optional and only if there's time: in a new conversation, ask
 question 2, then just "What about rent?". The model answers *unsupported*. All 50 metric-switch
 follow-ups in its training data follow a single-city question ([evaluation.md](evaluation.md),
 "Found in the live demo").
