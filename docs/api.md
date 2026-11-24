@@ -142,8 +142,11 @@ left out above.
 }
 ```
 
-Answer with the county ("the one in Montgomery County"), sending the history back, and the next
-turn resolves it.
+The plan schema accepts a county (`cities[].county`), and the validator uses it to pick one of the
+matches. **The model wasn't trained or evaluated on resolving a clarification**, though: no
+training example or eval case replies to one ("the one in Montgomery County") or names a county
+in the question. Whether a follow-up resolves the ambiguity is untested; see
+[model.md](model.md), "Known limitations".
 
 ### Response kinds and what causes them
 

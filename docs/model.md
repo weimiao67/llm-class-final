@@ -109,6 +109,10 @@ eval-specific phrasings. Still, the data-v2 score is somewhat optimistic for tha
 - **Metric switch after a state ranking** ("Rank Colorado…" → "What about rent?") is answered as
   `unsupported`; the training data has no such follow-up ([evaluation.md](evaluation.md), "Found
   in the live demo").
+- **Resolving a clarification is untested.** After "Several places match Oakwood…", neither a
+  reply naming the county nor a question that includes it appears in the training data (0
+  examples) or the eval set (0 cases). The plan schema and validator support a county; the model
+  was never taught to fill it in.
 - Remaining eval failures cluster in a few phrasings outside the grammar: "before/after Y"
   periods, "highest … among" read as the wrong operation, and flipped sort order for "cheapest".
 - The answer writer is the same model without answer-specific training. 89.7% of its first

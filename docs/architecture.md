@@ -100,6 +100,8 @@ summary, never the raw tables.
 - **Follow-ups that switch metric after a state ranking** ("What about rent?") are a known miss of
   the current model: the training data had no such examples ([evaluation.md](evaluation.md),
   "Found in the live demo").
+- **Following up on a clarification** (naming the county after "Several places match Oakwood…")
+  isn't covered by the training data or the eval set, so it is untested ([model.md](model.md)).
 - **HTTPS and user accounts:** the app is plain HTTP limited to one IP address and protected by an
   API key. A public deployment would need TLS (a domain or load balancer) and per-user auth.
 - **Next steps:** metric-switch follow-ups in the training data; metro and ZIP-level series;

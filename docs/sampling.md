@@ -113,9 +113,10 @@ answer step instead of stopping at a clarification.
 
 After fine-tuning, the model has learned the format, and the constraint makes no measurable
 difference to accuracy (the 0.8-point gap is one case). The project keeps it on as a cheap safety
-net: it guarantees a parseable call, and costs about 0.1 s at the median turn. For the base model the
-constraint matters more: even with it, 6% of first outputs were invalid and 25 retries were
-needed.
+net: it guarantees a parseable call, with no measurable latency cost (p50 1.2 vs. 1.1 s, within
+run-to-run noise). The base model wasn't
+measured without the constraint; even with it, 6% of its first outputs were invalid and 25
+retries were needed.
 
 ## Bounds on every turn
 
