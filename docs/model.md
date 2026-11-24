@@ -99,13 +99,17 @@ chat template in `tokenizer_config.json` (TGI reads it there; transformers 4.57 
 | Round | Data | Execution accuracy | What changed |
 |---|---|---:|---|
 | v2-lora | data v1 `93a8b1a171`, 2 epochs | 84.0% | Fixed statewide scope, refusal kinds, declining. Regressed on methodology (73% → 27%: no `search_knowledge` examples) and follow-ups (60% → 45%: every training follow-up named "City, ST" in the history). |
-| **v3-lora** | **data v2 `f261a5f4d7`, 1 epoch** | **89.3%** | Added methodology examples and follow-ups whose history names only the city. Methodology 100%, follow-ups 85%. |
+| **v3-lora** | **data v2 `f261a5f4d7`, 1 epoch** | **89.3%** | Added methodology examples and follow-ups whose history names only the city. Methodology 100% (choosing `search_knowledge`; answers not yet scored), follow-ups 85%. |
 
 Both regressions were found on the eval set, and the fixes are general coverage fixes, not
 eval-specific phrasings. Still, the data-v2 score is somewhat optimistic for that reason.
 
 ## Known limitations
 
+- **Methodology answers aren't scored yet.** The eval runs predate the knowledge base, so
+  "methodology 100%" measures choosing `search_knowledge`, not the answer. One of the model's 15
+  queries is off-topic ("Does ZORI include single-family homes?" → `ZORI sale price vs rent`),
+  so the right section isn't retrieved ([evaluation.md](evaluation.md), "Methodology answers").
 - **Metric switch after a state ranking** ("Rank Colorado…" → "What about rent?") is answered as
   `unsupported`; the training data has no such follow-up ([evaluation.md](evaluation.md), "Found
   in the live demo").

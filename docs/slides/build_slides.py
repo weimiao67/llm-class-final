@@ -579,6 +579,7 @@ def build() -> Path:
                 f"{rate(final, 'turn_success', f):.0f}%"
                 for f in ("multi_city", "aggregate", "boundary", "injection")
             ),
+            "Methodology = chose the search tool; its answers aren't scored yet.",
             "Full per-family table and error analysis: docs/evaluation.md",
         ],
         size=17,
@@ -652,7 +653,9 @@ def build() -> Path:
         "One failure fine-tuning fixed, one it didn't",
         "Fixed: the first LoRA round "
         "had no search_knowledge examples, so methodology questions collapsed from 73% "
-        "to 27%. Data v2 added them: 100%. Not fixed: 'What about rent?' right after a "
+        "to 27%. Data v2 added them: it chose the search tool every time (100%). Note: the "
+        "eval scored only that choice; the answers themselves aren't scored yet. "
+        "Not fixed: 'What about rent?' right after a "
         "state ranking. All 50 metric-switch follow-ups in the training data follow a "
         "single-city question, so the model declines. The eval set has the same blind "
         "spot; it was found in the live demo.",
@@ -668,9 +671,10 @@ def build() -> Path:
         Inches(5.9),
         Inches(4.8),
         "Fixed: methodology questions",
-        f"base {meth[0]:.0f}% → LoRA data v1 {meth[1]:.0f}% → data v2 {meth[2]:.0f}%\n\n"
+        f"chose search_knowledge: base {meth[0]:.0f}% → LoRA data v1 {meth[1]:.0f}% → "
+        f"data v2 {meth[2]:.0f}%\n\n"
         "Data v1 had no search_knowledge examples, so the model learned never to use the "
-        "tool.\n\nData v2 added 180 of them.",
+        "tool.\n\nData v2 added 180 of them. (Answers not yet scored.)",
     )
     card(
         s,
