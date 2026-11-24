@@ -6,6 +6,12 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 
 ## Summary
 
+> **Methodology cases measure tool choice.** Every run below was made before the knowledge base
+> existed (Step 4a), so the 15 methodology cases were scored on choosing `search_knowledge`, not
+> on the answer. "Methodology 100%" means the model chose the right tool every time; its full
+> answers from the knowledge base haven't been scored yet. See
+> [Methodology answers](#methodology-answers-not-yet-scored) at the end.
+
 | Run | Model | Prompt | Decoding | Turn success | Execution accuracy | Report |
 |---|---|---|---|---:|---:|---|
 | v0 | Llama-3.2-3B-Instruct (base) | planner-v1 | greedy, structure-only schema | 31.0% | 16.0% | [`20261122-071857-…`](../evaluation/reports/20261122-071857-llama-3.2-3b-instruct-base/report.md) |
@@ -255,7 +261,8 @@ design (methodology and context-only follow-ups).
 | follow_up | 60.0% | 45.0% | **85.0%** |
 | multi_city | 20.0% | 86.7% | 83.3% |
 
-Data v2 recovered both regressions (methodology 27% → 100%, follow-ups 45% → 85%). Against data v1,
+Data v2 recovered both regressions (methodology 27% → 100%, measured as choosing
+`search_knowledge`; follow-ups 45% → 85%). Against data v1,
 20 cases newly pass and 3 newly fail. Constrained decoding again makes no real difference after
 fine-tuning.
 
@@ -330,3 +337,21 @@ follow-up score doesn't measure this case.
 
 The demo uses the explicit phrasing. Fixing the model would need metric-switch follow-ups after
 rankings and aggregates in the training data, with new eval cases for them (v1 stays frozen).
+
+## Methodology answers: not yet scored
+
+The runs above score methodology cases only on choosing `search_knowledge` (see the note at the
+top). The answer path itself has this evidence so far:
+
+- The **oracle** run with the knowledge base (`--knowledge`) answers all 15 methodology cases
+  with sources. It uses the gold calls, so it tests retrieval and the answer path, not the model.
+- **Retrieval for the model's own queries:** running the 15 queries the data-v2 model produced
+  through the BM25 index, 14 retrieve a relevant section in the top 3 (nearly always first). The
+  miss is a bad query, not bad retrieval: for "Does ZORI include single-family homes?" the model
+  searched `ZORI sale price vs rent`, so "Housing types in ZORI" isn't retrieved.
+- **Live demo:** "What is ZORI and how is it smoothed?" was answered correctly, with sources, by
+  the data-v2 model on the deployed app.
+
+To score the full answers, run the eval with `--knowledge` against the endpoint
+(`scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora --knowledge ...`).
+
