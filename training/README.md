@@ -7,7 +7,7 @@ baseline failures it targets are in [docs/evaluation.md](../docs/evaluation.md).
 
 ## How examples are made
 
-1. **Templates** (`templates.py`, 37 of them) build one example each. The question comes from a
+1. **Templates** (`templates.py`, 40 of them in data v2) build one example each. The question comes from a
    **phrase grammar** (`grammar.py`): each sentence shape has interchangeable parts (openers,
    metric nouns and modifiers, period and operation phrasings) expanded with a seeded RNG, plus
    light noise (casing, punctuation, "yoy"). The gold call is built from the same slot values, so
