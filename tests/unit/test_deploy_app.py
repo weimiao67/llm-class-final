@@ -66,7 +66,7 @@ def test_user_data_is_valid_bash_and_sets_up_the_app():
     bash = shutil.which("bash")
     if bash:
         subprocess.run([bash, "-n"], input=text, text=True, check=True)
-    assert text.startswith("#!/bin/bash\n") and "set -euo pipefail" in text
+    assert text.startswith("#!/bin/bash\n") and "set -Eeuo pipefail" in text
     assert "sha256sum -c -" in text  # the Compose binary is checksum-verified
     assert "git checkout --quiet main" in text
     assert f"s3://{BUCKET}/llm-final/app-data/23ccd46a4560/" in text
@@ -76,16 +76,45 @@ def test_user_data_is_valid_bash_and_sets_up_the_app():
     assert "API_KEY=$api_key" in env
     assert text.index("umask 077") < text.index("cat > .env")  # the key file is private
     assert "set -x" not in text and "echo $api_key" not in text  # the key never reaches the log
-    assert text.rstrip().endswith('echo "setup finished $(date -Is)"')
+    assert text.rstrip().endswith('step "setup finished"')
+
+
+def test_user_data_installs_buildx_for_compose_builds():
+    # Compose builds through buildx; Amazon Linux's docker package doesn't ship it, and the first
+    # real launch failed with "compose build requires buildx 0.17.0 or later".
+    text = script()
+    assert 'install_plugin docker-buildx "$buildx_url/buildx-v0.38.1.linux-$buildx_arch"' in text
+    assert text.index("install_plugin docker-buildx") < text.index("docker compose up")
+    assert "docker buildx version" in text
+    assert tuple(int(x) for x in app.BUILDX_VERSION.lstrip("v").split(".")) >= (0, 17)
+
+
+def test_user_data_reports_progress_and_failures_on_the_console():
+    text = script()
+    assert "set -Eeuo pipefail" in text  # -E: the ERR trap also fires inside functions
+    assert 'exec > >(tee -a "$log" "$console" >/dev/null) 2>&1' in text
+    assert "[ -w /dev/console ] && console=/dev/console" in text
+    assert "logger" not in text  # a failing log sink must not be able to stop the setup
+    assert (
+        "trap 'echo \"[llm-final-app] SETUP FAILED (exit $?) at line $LINENO: $BASH_COMMAND\"' ERR"
+        in text
+    )
+    assert 'step "copying dataset 23ccd46a4560' in text and 'step "reading the API key' in text
 
 
 def test_user_data_deploys_the_requested_ref():
     assert "git checkout --quiet v1.0" in script(ref="v1.0")
 
 
-def test_compose_checksums_cover_both_instance_architectures():
-    assert set(app.COMPOSE_SHA256) == {"x86_64", "aarch64"}
-    assert all(re.fullmatch(r"[0-9a-f]{64}", sha) for sha in app.COMPOSE_SHA256.values())
+def test_plugin_checksums_cover_both_instance_architectures():
+    for assets in (app.COMPOSE_ASSETS, app.BUILDX_ASSETS):
+        assert set(assets) == {"x86_64", "aarch64"}  # keys are `uname -m` values
+        assert all(re.fullmatch(r"[0-9a-f]{64}", sha) for _, sha in assets.values())
+    assert [a for a, _ in app.BUILDX_ASSETS.values()] == ["amd64", "arm64"]  # buildx file names
+    text = script()
+    for arch, (name, sha) in app.BUILDX_ASSETS.items():
+        assert f"{arch}) compose_arch={app.COMPOSE_ASSETS[arch][0]}" in text
+        assert f"buildx_arch={name} buildx_sha={sha}" in text
 
 
 # ---- AWS flows with fake clients ----------------------------------------------------------------
@@ -274,3 +303,35 @@ def test_image_matches_the_instance_architecture():
     ssm.get_parameter.return_value = {"Parameter": {"Value": "ami-arm"}}
     assert app.latest_ami(ssm, ec2, "t4g.small") == "ami-arm"
     assert ssm.get_parameter.call_args.kwargs["Name"] == app.ami_param("arm64")
+
+
+def test_check_labels_an_instance_type_denial_as_ec2_not_ssm(capsys):
+    clients = fake_clients(profile_exists=True)
+    clients["ec2"].describe_instance_types.side_effect = AWSError("UnauthorizedOperation")
+    app.cmd_check(clients, check_args())
+    out = capsys.readouterr().out
+    assert "NO   EC2 describe the instance type: UnauthorizedOperation" in out
+    assert "OK   SSM read the AMI id: ok" in out  # the SSM permission is still tested
+    # ... but the launch isn't dry-run with a guessed (maybe wrong-architecture) image.
+    clients["ec2"].run_instances.assert_not_called()
+    assert "architecture is unknown" in out
+
+
+def test_check_skips_the_launch_dry_run_without_an_image_id(capsys):
+    clients = fake_clients(profile_exists=True)
+    clients["ssm"].get_parameter.side_effect = AWSError("AccessDeniedException")
+    assert app.cmd_check(clients, check_args()) == 1
+    clients["ec2"].run_instances.assert_not_called()
+    out = capsys.readouterr().out
+    assert "NO   SSM read the AMI id: AccessDeniedException" in out
+    assert (
+        "??   EC2 launch an instance with the app role (dry run): not checked: no image id" in out
+    )
+
+
+def test_runbook_uses_the_ui_wording_for_a_deleted_endpoint():
+    from ui.view import ENDPOINT_ERRORS
+
+    doc = (ROOT / "docs" / "app-deployment.md").read_text()
+    assert f"Model endpoint {ENDPOINT_ERRORS['ValidationException']}" in doc
+    assert "Model endpoint unreachable" not in doc

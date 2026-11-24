@@ -17,6 +17,11 @@ MAX_CARDS = 4  # more cities than this read better as a table
 METRIC_NAMES = {"zhvi": "Home value (ZHVI)", "zori": "Rent (ZORI)"}
 GAP_CAPTION = "Missing months are gaps; values are not interpolated or forecast."
 TRACE_CAPTION = "These are the real tool events, not model reasoning."
+# /ready error codes from SageMaker DescribeEndpoint, in words.
+ENDPOINT_ERRORS = {
+    "ValidationException": "not deployed",  # "Could not find endpoint ..."
+    "AccessDeniedException": "not allowed for this app's role",
+}
 # Row columns that hold months or values, for formatting the data table.
 MONTH_COLUMNS = {"month", "start_month", "end_month", "prior_month", "first_month",
                  "last_month", "max_month", "min_month"}  # fmt: skip
@@ -229,7 +234,10 @@ def status_line(ready: dict[str, Any] | None, error: str | None = None) -> tuple
     data = ready.get("dataset_version", "?")
     if ready.get("status") == "ready":
         return "ok", f"Ready · {model} · data {data}"
-    endpoint = (ready.get("model") or {}).get("status", "not ready")
+    info = ready.get("model") or {}
+    endpoint = info.get("status", "not ready")
+    if endpoint == "unreachable":
+        endpoint = ENDPOINT_ERRORS.get(info.get("error"), f"unreachable ({info.get('error')})")
     return "warn", f"Model endpoint {endpoint} · {model} · data {data}"
 
 

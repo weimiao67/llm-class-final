@@ -25,7 +25,7 @@ SageMaker Studio terminal, like the other runbooks; `scripts/deploy_app.py` uses
 **Cost:** `t3.small` is about $0.02/hour while running (about $0.50/day); stopped, only its disk
 costs a few cents a day. The endpoint is billed separately (about $1.5/hour), so the usual rule
 still applies: **delete the endpoint after each session**. The app keeps running and shows
-"Model endpoint unreachable" until the endpoint is back.
+"Model endpoint not deployed" until the endpoint is back.
 
 **Security:** the UI and the API are plain HTTP, reachable only from the address you allow. The
 API requires the API key; the UI holds it server-side, so anyone who can reach port 8501 can use
@@ -126,11 +126,12 @@ the API key. The dataset copy in S3 is kept.
 | Symptom | Cause and fix |
 |---|---|
 | Browser can't connect | Setup still running (wait 5 minutes), or your IP changed (`allow`). |
-| UI: "Model endpoint unreachable" or "Creating" | The endpoint is deleted or still starting; deploy it as in step 3. |
+| UI: "Model endpoint not deployed" or "Creating" | The endpoint is deleted or still starting; deploy it as in step 3. |
+| UI: "Model endpoint not allowed for this app's role" | The endpoint name differs from the one in the role's policy (`--endpoint`, default `final-wm-qwen-lora`). |
 | UI: "Can't reach the agent API" | The API container is down. Open a shell (EC2 console → Connect → Session Manager), then `cd /opt/llm-final-app && sudo docker compose ps` and `sudo docker compose logs api`. |
-| Setup failed | `sudo tail -50 /var/log/llm-final-app-setup.log` in a Session Manager shell. Fix, then `down` and `up`. |
+| Setup failed | EC2 console → Actions → Monitor and troubleshoot → **Get system log**: the `[llm-final-app]` lines show each step, and `SETUP FAILED … at line N: <command>` names the one that failed. The same is in `/var/log/llm-final-app-setup.log`. After fixing the cause, re-run setup in a Session Manager shell: `sudo rm -rf /opt/llm-final-app && sudo bash /var/lib/cloud/instance/scripts/part-001` (or `down` and `up`). |
+| Session Manager: "instance is not connected" | The instance role is missing, or lacks `AmazonSSMManagedInstanceCore`. Attach or fix it (Actions → Security → Modify IAM role), then reboot. |
 | API answers 401 | Wrong or missing `X-API-Key`; read it again from SSM as in step 3. |
-| `AccessDeniedException` calling the endpoint | The endpoint name differs from `--endpoint` (default `final-wm-qwen-lora`); the role allows only that name. |
 
 ## From the console (if `check` reports `NO` or `up` is denied)
 
