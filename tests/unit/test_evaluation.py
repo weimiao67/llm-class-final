@@ -362,3 +362,17 @@ def test_rescore_rejects_mismatched_case_sets():
 
     with pytest.raises(ValueError, match="same case ids"):
         changed_ids([case(id="a")], [case(id="b")])
+
+
+def test_console_summary_says_na_for_a_metric_with_no_scored_cases():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "run_eval.py"
+    spec = importlib.util.spec_from_file_location("run_eval", path)
+    run_eval = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run_eval)
+    # A methodology-only run scores no data cases: that's "n/a", not 0.0%.
+    assert run_eval.pct({"rate": None, "n": 0, "hits": 0}) == "n/a"
+    assert run_eval.pct({"rate": 0.0, "n": 5, "hits": 0}) == "0.0%"
+    assert run_eval.pct({"rate": 0.8931, "n": 131, "hits": 117}) == "89.3%"
