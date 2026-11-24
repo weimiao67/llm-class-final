@@ -272,9 +272,10 @@ def build() -> Path:
     # 1. Title
     s = d.slide(
         None,
-        "Introduce the project in one sentence: a small fine-tuned model plans the "
-        "analysis; trusted code computes every number. Say what the audience will see: "
-        "the approach, the fine-tuning results, and a live demo on AWS.",
+        "Hi, I'm <your name>. My project is a housing-market analyst you can ask questions in "
+        "plain English. The twist: a small model I fine-tuned decides what to compute, but it "
+        "never does the math itself. Code does. I'll show how it works, how much fine-tuning "
+        "helped, and then a live demo running on AWS.",
     )
     text_box(s, L, Inches(2.3), W, Inches(1.2), ["Housing Market AI Analyst"], size=44, bold=True)
     text_box(
@@ -283,7 +284,10 @@ def build() -> Path:
         Inches(3.6),
         W,
         Inches(1.2),
-        ["A fine-tuned 3B model plans the analysis. Trusted code computes every number."],
+        [
+            "Ask about home values and rents in plain English. A small fine-tuned model plans "
+            "the analysis, and code does the math."
+        ],
         size=24,
         color="ink2",
     )
@@ -302,11 +306,12 @@ def build() -> Path:
     n_docs = len(list((ROOT / "docs").glob("*.md")))
     s = d.slide(
         "Project at a glance",
-        "One slide that summarizes the whole project, organized by the rubric's three areas. "
-        "Left: the model work (base-model comparison, LoRA fine-tune, validator-checked "
-        "training data, the 200-case eval set, and the result). Middle: the inference "
-        "pipeline and the sampling method, exposed as an API. Right: the AWS deployment, "
-        "the documentation, and the demo. The rest of the talk goes through each in turn.",
+        "Here's the whole project on one slide, grouped the way the project is graded. On the "
+        "left is the model work: I compared three small models, fine-tuned the best one, and "
+        "built a 200-question test set to measure it. In the middle is how a question gets "
+        "answered, including how I sample from the model, and the API on top. On the right "
+        "is the AWS deployment, the docs, and the demo. The rest of the talk walks through "
+        "each part.",
     )
     text_box(
         s,
@@ -315,9 +320,8 @@ def build() -> Path:
         W,
         Inches(1.0),
         [
-            "A conversational analyst for U.S. city home values and rents (Zillow ZHVI and "
-            "ZORI). A LoRA-fine-tuned 3B model plans each analysis; trusted code validates "
-            "it, runs it as SQL, and computes every number."
+            "Answers questions about U.S. city home values and rents (Zillow's ZHVI and "
+            "ZORI). A fine-tuned 3B model plans each answer; code checks it and does the math."
         ],
         size=18,
         color="ink2",
@@ -325,28 +329,26 @@ def build() -> Path:
     glance = [
         (
             "Model · LoRA · evaluation",
-            "• Compared Llama-3.2-3B, Phi-4-mini, and Qwen2.5-3B; fine-tuned Qwen with LoRA "
-            "on SageMaker\n"
-            "• 3,000 synthetic training examples, each checked against the real data and "
-            "kept away from the eval set\n"
-            f"• 200-case frozen eval set with gold plans: execution accuracy {ex_base:.1f}% "
-            f"→ {ex_final:.1f}%, turn success {ts_base:.1f}% → {ts_final:.1f}%",
+            "• Compared Llama-3.2-3B, Phi-4-mini, and Qwen2.5-3B, then fine-tuned Qwen with "
+            "LoRA on SageMaker\n"
+            "• Generated 3,000 training examples and kept only the ones that ran correctly on "
+            "the real data\n"
+            f"• Built a 200-question test set with correct answers: accuracy went from "
+            f"{ex_base:.0f}% to {ex_final:.0f}%",
         ),
         (
             "Inference pipeline · sampling · API",
-            "• Question → typed plan → validation against the data → parameterized SQL "
-            "(DuckDB) → answer\n"
-            "• Planning: greedy, JSON-schema constrained. Answers: T=0.3, top-p 0.9, with "
-            "a check that every number is in the result\n"
-            "• BM25 search over methodology notes; FastAPI endpoint with an API key",
+            "• Question → plan → checked against the data → SQL → a short answer\n"
+            "• Plans: greedy decoding, held to a JSON schema. Answers: sampled at "
+            "temperature 0.3, then every number is checked\n"
+            "• Methodology questions search a small set of notes; a REST API serves it all",
         ),
         (
             "Deployment · docs · demo",
-            "• Model on a SageMaker TGI endpoint; API and Streamlit UI on EC2 with Docker, "
-            "scoped IAM role\n"
-            f"• README and {n_docs} docs: architecture, model, sampling, evaluation, API, "
-            "and runbooks for every AWS step\n"
-            "• Unit tests and CI on every pull request; live demo with a scripted fallback",
+            "• The model runs on a SageMaker endpoint; the app (API + web UI) runs in Docker "
+            "on EC2\n"
+            f"• A README and {n_docs} docs, including step-by-step runbooks for AWS\n"
+            "• Automated tests on every change, and a live demo (with a backup recording)",
         ),
     ]
     cw = Inches(3.9)
@@ -369,7 +371,7 @@ def build() -> Path:
         Inches(6.75),
         W,
         Inches(0.5),
-        ["Code, docs, eval reports, and this deck: github.com/weimiao67/llm-class-final"],
+        ["Code, docs, test results, and this deck: github.com/weimiao67/llm-class-final"],
         size=14,
         color="ink2",
     )
@@ -377,10 +379,12 @@ def build() -> Path:
     # 3. Problem
     s = d.slide(
         "The problem",
-        "Even a simple question needs the right dataset, geography, period, "
-        "a calculation, and the caveats. An LLM answering from memory invents numbers; one "
-        "that writes SQL is hard to govern (injection, wrong joins, invented columns). The "
-        "research question: can a small fine-tuned model plan these analyses reliably?",
+        "Take a simple question: how did rents change in Denver over three years? To answer it "
+        "you need the right dataset, the right Denver, the right months, a calculation, and a "
+        "note about what the index actually measures. If you ask a chatbot, it'll give you a "
+        "confident number it made up. If you let a model write SQL, you have to trust "
+        "whatever query it writes. So my question was: can a small model, trained for just "
+        "this job, plan these analyses reliably?",
     )
     text_box(
         s,
@@ -390,11 +394,12 @@ def build() -> Path:
         Inches(5),
         [
             '"How did rents change in Denver over three years?"',
-            "• Find the right dataset and series (rent index, smoothed, seasonally adjusted)",
-            "• Resolve the city (30 Zillow city names exist in several counties of one state)",
-            "• Filter the period, compute the change, note missing months",
-            "• Explain what the index measures",
-            "LLMs answering from memory invent numbers. LLM-written SQL is hard to govern.",
+            "• Pick the right data: Zillow's rent index, smoothed and seasonally adjusted",
+            "• Pick the right city: some names exist in several counties of the same state",
+            "• Pick the months, compute the change, and flag any missing data",
+            "• Explain what the index actually measures",
+            "Ask a chatbot and it makes up a number. Let a model write SQL and you have to "
+            "trust its query.",
         ],
         size=20,
     )
@@ -412,22 +417,23 @@ def build() -> Path:
         body_size=16,
     )
 
-    # 3. Approach
+    # 4. Approach
     s = d.slide(
-        "Approach: the model plans, code computes",
-        "Walk the pipeline left to right. "
-        "The model's only output is a typed tool call. The validator checks it against "
-        "the data (cities, months, fields); the compiler makes parameterized SQL; DuckDB "
-        "runs it. The model then writes one or two sentences from the result, and a check "
-        "rejects any number not in the result.",
+        "How it works: the model plans, code computes",
+        "Let's follow one question left to right. The model's only job here is to fill in a "
+        "structured plan: which metric, which cities, which months, which calculation. Then "
+        "plain code takes over. It checks the plan against the data, turns it into SQL, and "
+        "runs it. The model comes back at the end to write a sentence or two about the "
+        "result, and a last check makes sure every number in that sentence really came from "
+        "the result.",
     )
     steps = [
-        ("Question", "plain English"),
-        ("Planner", "Qwen2.5-3B + LoRA\ntyped AnalysisPlan"),
-        ("Validator", "cities, months,\nfields vs. data"),
-        ("SQL + DuckDB", "parameterized,\nversioned Parquet"),
-        ("Answer writer", "1–2 sentences\nfrom the result"),
-        ("Number check", "every number\nin the result"),
+        ("Question", "in plain English"),
+        ("Planner", "fine-tuned model\nwrites a plan"),
+        ("Validator", "checks cities and\nmonths in the data"),
+        ("SQL + DuckDB", "runs the query\nsafely"),
+        ("Answer writer", "1–2 sentences\nabout the result"),
+        ("Number check", "every number must\ncome from the result"),
     ]
     bw, gap, top = Inches(1.75), Inches(0.33), Inches(2.0)
     for i, (title, body) in enumerate(steps):
@@ -451,21 +457,25 @@ def build() -> Path:
         W,
         Inches(2.6),
         [
-            "Blue = model calls.  Everything else is deterministic code, the same for every model.",
-            "• Ambiguous city → the validator asks which one, instead of guessing",
-            "• Methodology questions → BM25 search over reviewed Zillow methodology notes",
-            "• Forecasts, advice, SQL requests → declined, with what the data can show instead",
+            "Blue boxes are the model. Everything else is ordinary code that behaves the same "
+            "every time.",
+            "• A city name that matches several places? It asks which one instead of guessing",
+            "• A question about how the indexes work? It searches my notes on Zillow's methods",
+            "• A forecast, financial advice, or raw SQL? It says no and offers what it can do",
         ],
         size=18,
     )
 
-    # 4. Trust boundary
+    # 5. Trust boundary
+    inj = final["families"]["injection"]["turn_success"]
     s = d.slide(
-        "Trust boundary",
-        "This is the safety argument. The model can only fill a typed "
-        "plan or decline. It cannot write SQL, touch tables, or put a number in front of "
-        "the user that isn't in the result: the check regenerates the answer or falls back "
-        "to a template written by code.",
+        "What the model can and can't do",
+        "This is why I trust the numbers. The model can only fill in a plan, ask a question "
+        "back, or say no. It never writes SQL or touches the database. And it can't put a "
+        "number in front of you that isn't in the result: if it tries, the answer is "
+        "rewritten, and as a last resort, code writes it. One thing is trained rather than "
+        "enforced: ignoring instructions hidden inside a question. It got 9 of the 10 test "
+        "cases right.",
     )
     card(
         s,
@@ -474,9 +484,10 @@ def build() -> Path:
         Inches(5.9),
         Inches(4.6),
         "The model can",
-        "Choose a tool: analyze, search_knowledge, respond\n\nFill a typed plan: metric, "
-        "cities, state, months, operation, ranking\n\nAsk a clarifying question, or decline\n\n"
-        "Write the prose of the answer",
+        "Pick a tool: analyze data, search the notes, or reply\n\n"
+        "Fill in a plan: metric, cities or state, months, calculation\n\n"
+        "Ask which city you meant, or decline a question\n\n"
+        "Write the sentence that goes with the result",
     )
     card(
         s,
@@ -484,20 +495,23 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.9),
         Inches(4.6),
-        "The model cannot",
-        "Write SQL or code, name tables or files\n\nShow a number that isn't in the tool result "
-        "(checked on every answer)\n\nPick a state the user didn't write (the validator asks)\n\n"
-        "Follow instructions injected in the question (trained to ignore them)",
+        "The model can't (code enforces it)",
+        "Write SQL or code, or touch the database\n\n"
+        "Show you a number that isn't in the result (every answer is checked)\n\n"
+        "Guess a state you didn't mention (the validator asks instead)\n\n"
+        "Trained, not enforced: ignoring instructions hidden in a question "
+        f"({inj['hits']} of {inj['n']} tests)",
     )
 
-    # 5. Model
+    # 6. Model
     s = d.slide(
-        "Model: choose a base, then fine-tune it",
-        "Compared two families on the same "
-        "prompt before training. Phi-4-mini couldn't be served on TGI 3.3.6 (partial "
-        "rotary embeddings). Qwen beat Llama by 23.6 points of execution accuracy, so it "
-        "was fine-tuned. LoRA on all projections, loss only on the tool call, one epoch "
-        "on one A10G GPU in 37 minutes.",
+        "Picking a model, then fine-tuning it",
+        "Before training anything, I gave three small models the same prompt and the same test "
+        "set. Phi-4-mini didn't even run on the serving stack I used. Qwen beat Llama by about "
+        "24 points, so I fine-tuned Qwen. The base model's mistakes were very consistent, "
+        "which is exactly what fine-tuning is good at fixing. I used LoRA, trained only on "
+        "the plan it should output, for one pass over the data. That took about 37 minutes "
+        "on a single GPU.",
     )
     llama = rate(summary(RUNS["Llama-3.2-3B (base)"]), "execution_accuracy")
     text_box(
@@ -507,12 +521,12 @@ def build() -> Path:
         Inches(6.2),
         Inches(5),
         [
-            "Base model comparison (execution accuracy)",
-            f"• Llama-3.2-3B-Instruct: {llama:.1f}%",
-            "• Phi-4-mini-instruct: not servable on TGI 3.3.6",
-            f"• Qwen2.5-3B-Instruct: {ex_base:.1f}%  → selected",
-            "Base failures were systematic: guessed city lists for statewide questions, wrong "
-            "refusal kind, analyzing questions it should decline.",
+            "Same prompt, same 200 test questions (accuracy):",
+            f"• Llama-3.2-3B: {llama:.1f}%",
+            "• Phi-4-mini: wouldn't run on the serving stack (TGI 3.3.6)",
+            f"• Qwen2.5-3B: {ex_base:.1f}%  → the one I fine-tuned",
+            "Its mistakes were consistent: it guessed lists of cities for statewide "
+            "questions, and it often declined the wrong way.",
         ],
         size=18,
     )
@@ -522,26 +536,29 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.5),
         Inches(4.4),
-        "LoRA fine-tune",
-        "r 16 · alpha 32 · dropout 0.05\nall attention + MLP projections\n\nloss on the final "
-        "tool call only\nlr 2e-4, cosine · batch 16 · 1 epoch\n\nml.g5.xlarge (A10G) · 36.7 min "
-        "· 8.5 GB\nmerged into the weights, served on TGI",
+        "The fine-tune",
+        "LoRA: rank 16, alpha 32, on all attention and MLP layers\n\n"
+        "Learns only the plan it should output\n\n"
+        "One pass over 2,661 examples · learning rate 2e-4\n\n"
+        "One A10G GPU (ml.g5.xlarge) · 37 minutes · 8.5 GB\n\n"
+        "Adapter merged into the model for serving",
     )
 
-    # 6. Training data
+    # 7. Training data
     s = d.slide(
-        "Training data: generated, then verified",
-        "The data is "
-        "synthetic but correct by construction: the grammar writes the question and the "
-        "gold call from the same slot values. Then every candidate runs through the "
-        "project's own validator and tools, and anything close to the eval set is "
-        "dropped. The trusted code doubles as a data-quality filter.",
+        "Training data: generated, then checked",
+        "I didn't have real training data, so I generated it. A small grammar writes each "
+        "question and its correct plan from the same pieces, so the pair is right by "
+        "construction. Then I ran every example through the same validator and query code "
+        "the app uses, and threw out anything that didn't work on the real data, plus "
+        "anything too close to a test question. The app's own code turned out to be the "
+        "best quality filter.",
     )
     funnel = [
-        ("Phrase grammar", "40 templates,\n7 scenarios"),
-        ("Execution filter", "gold call must run\non the real data"),
-        ("Leakage filters", "no eval cities, plans,\nor near-duplicate questions"),
-        ("3,000 examples", "2,661 train / 339 dev\n317 rejected"),
+        ("Question grammar", "40 templates,\n7 kinds of question"),
+        ("Run on real data", "keep it only if\nthe plan works"),
+        ("Keep tests separate", "no test cities, plans,\nor look-alike questions"),
+        ("3,000 examples", "2,661 train / 339 dev\n317 thrown out"),
     ]
     bw = Inches(2.75)
     for i, (title, body) in enumerate(funnel):
@@ -556,24 +573,24 @@ def build() -> Path:
         W,
         Inches(3),
         [
-            "Scenario mix: standard 690 · scope 570 · follow-up 480 · clarify 420 · refusal 420 · "
-            "retry 240 · methodology 180",
-            "• Dev questions use sentence shapes the model never trained on",
-            "• Closest training question to any eval question: 3-gram similarity 0.597 "
-            "(threshold 0.6)",
-            "• Deterministic: same seed and code → same dataset, checked by sha256",
+            "The mix: single-city questions, statewide questions, follow-ups, ambiguous "
+            "cities, things to decline, fixing a rejected plan, and methodology questions",
+            "• The dev set uses sentence patterns the model never saw in training",
+            "• No training question is a near copy of a test question (every one checked)",
+            "• Rebuilding gives exactly the same data, verified with checksums",
         ],
         size=18,
     )
 
-    # 7. Sampling
+    # 8. Sampling
     s = d.slide(
         "Sampling: exact plans, checked answers",
-        "Two kinds of model "
-        "calls, decoded differently. Plans: greedy, so runs are reproducible, and "
-        "constrained by a structure-only JSON schema that also enforces city-or-state "
-        "scope and valid state codes. Answers: sampled at T=0.3, top-p 0.9; any number "
-        "not in the result triggers a greedy retry, then a code-written template.",
+        "The model gets called twice per question, and I decode the two calls differently. "
+        "For the plan, I want the single most likely answer every time, so I use greedy "
+        "decoding, and the server is only allowed to produce output that fits my JSON schema. "
+        "For the sentence at the end, a little variety reads better, so I sample at "
+        "temperature 0.3. Since sampling can slip in a wrong number, every number is checked "
+        "against the result, and a failed answer gets a second try, then a template.",
     )
     card(
         s,
@@ -581,9 +598,10 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.9),
         Inches(2.4),
-        "Planning: greedy + JSON-schema constrained",
-        "TGI masks tokens that would break the schema\nstructure-only schema (full one hung TGI)\n"
-        "city-scoped OR state-scoped plan · 51 state codes",
+        "Plans: greedy, held to a JSON schema",
+        "The server can only produce output that fits the schema\n"
+        "A full schema made the server hang; a slimmer one works\n"
+        "The schema also forces cities or a state, and real state codes",
     )
     card(
         s,
@@ -591,8 +609,9 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.9),
         Inches(2.4),
-        "Answers: T=0.3, top-p 0.9",
-        "every number must be in the tool result\nfail → greedy retry → template written by code",
+        "Answers: temperature 0.3, top-p 0.9",
+        "Every number has to appear in the result\n"
+        "If not: try again greedily, then fall back to a template",
     )
     text_box(
         s,
@@ -601,25 +620,25 @@ def build() -> Path:
         W,
         Inches(2.8),
         [
-            "Measured on the eval runs (fine-tuned model):",
-            "• 89.7% of first sampled answers pass the number check (139 of 155)",
-            "• Rejected answers: 11 miscomputed numbers (e.g. 33,821.90 instead of 3,382.19), "
-            "5 stray integers",
-            "• Planner retries: 25 for the base model → 0 after fine-tuning",
-            "• Constraint on vs. off after fine-tuning: 89.3% vs. 90.1% (one case): the format "
-            "is learned",
+            "What actually happened in testing (fine-tuned model):",
+            "• 9 out of 10 first answers passed the number check (139 of 155)",
+            "• The rest mostly had math slips, like 33,821.90 where the result said 3,382.19",
+            "• Bad plans that needed a retry: 25 before fine-tuning, 0 after",
+            "• After fine-tuning, the schema barely matters (89.3% with it, 90.1% without): "
+            "the model has learned the format",
         ],
         size=17,
     )
 
-    # 8. Results
+    # 9. Results
     s = d.slide(
-        "Results: fine-tuning closes the gap",
-        f"Execution accuracy runs predicted and "
-        f"gold plans and compares the result tables, as in text-to-SQL benchmarks. "
-        f"Base Qwen {ex_base:.1f}% → fine-tuned {ex_final:.1f}%. Turn success, which also "
-        f"scores clarifications, refusals, and methodology answers, {ts_base:.1f}% → "
-        f"{ts_final:.1f}%. On eval v1.1 (four corrected gold plans): 92.1% and 94.5%.",
+        "Results: fine-tuning closed most of the gap",
+        f"The main number is accuracy: for each test question I run the model's plan and the "
+        f"correct plan, and check that the results match. That's the same idea text-to-SQL "
+        f"benchmarks use. The base model got {ex_base:.0f}% right; after fine-tuning it gets "
+        f"{ex_final:.0f}%. Counting every kind of question, including the ones it should ask "
+        f"about or decline, it goes from {ts_base:.0f}% to {ts_final:.0f}%. And every first "
+        f"output is now valid JSON.",
     )
     s.shapes.add_picture(str(IMG / "chart_accuracy.png"), L, Inches(1.3), width=Inches(7.6))
     card(
@@ -629,7 +648,7 @@ def build() -> Path:
         Inches(4.1),
         Inches(1.4),
         f"{ts_final:.1f}%",
-        f"turn success (base {ts_base:.1f}%)",
+        f"of all 200 test questions handled right (base: {ts_base:.1f}%)",
         fill="blue",
     )
     card(
@@ -639,7 +658,7 @@ def build() -> Path:
         Inches(4.1),
         Inches(1.4),
         "100%",
-        f"valid first output (base {rate(base, 'envelope_valid'):.0f}%)",
+        f"valid output on the first try (base: {rate(base, 'envelope_valid'):.0f}%)",
     )
     p50, p95 = final["overall"]["latency_ms_p50"] / 1000, final["overall"]["latency_ms_p95"] / 1000
     card(
@@ -648,17 +667,18 @@ def build() -> Path:
         Inches(4.7),
         Inches(4.1),
         Inches(1.4),
-        f"{p50:.1f} s / {p95:.1f} s",
-        "latency p50 / p95 per turn",
+        f"{p50:.1f} s",
+        f"for a typical question; 95% finish within {p95:.1f} s",
     )
 
-    # 9. By family
+    # 10. By family
     s = d.slide(
         "Where fine-tuning helped",
-        "Statewide questions (multi-city, aggregate) and "
-        "refusal kinds (boundary, injection) improved the most: these were the base "
-        "model's systematic failures. Single-city questions were already good and stayed "
-        "at 100%.",
+        "The biggest jumps are exactly where the base model kept failing: statewide questions, "
+        "and knowing when and how to decline. Single-city questions went from 83% to 100%. "
+        "One category slipped a little, highest-and-lowest-month questions, from 18 to 17 out "
+        "of 20. And a note on methodology: the 100% there means it chose to search my notes; "
+        "the answers themselves haven't been scored yet.",
     )
     s.shapes.add_picture(str(IMG / "chart_families.png"), L, Inches(1.4), width=Inches(7.6))
     text_box(
@@ -670,30 +690,35 @@ def build() -> Path:
         [
             "Biggest gains:",
             *(
-                f"• {f.replace('_', ' ')}: {rate(base, 'turn_success', f):.0f}% → "
+                f"• {label}: {rate(base, 'turn_success', f):.0f}% → "
                 f"{rate(final, 'turn_success', f):.0f}%"
-                for f in ("multi_city", "aggregate", "boundary", "injection")
+                for f, label in (
+                    ("multi_city", "Several cities"),
+                    ("aggregate", "Statewide averages"),
+                    ("boundary", "Declining correctly"),
+                    ("injection", "Ignoring injected text"),
+                )
             ),
-            "Methodology = chose the search tool; its answers aren't scored yet.",
-            "Full per-family table and error analysis: docs/evaluation.md",
+            "One small drop: highest/lowest month, 90% → 85%.",
+            "Methodology = chose to search the notes; answers not scored yet.",
         ],
         size=17,
     )
 
-    # 10. Deployment
+    # 11. Deployment
     s = d.slide(
-        "Deployment on AWS",
-        "The model runs on a SageMaker real-time endpoint with "
-        "TGI. The app (FastAPI agent + Streamlit UI) runs as two containers on one EC2 "
-        "t3.small, about 70 cents a day with its address and disk. The instance role may "
-        "only call this one endpoint, read the data prefix, and read the API key. The UI "
-        "talks to the API "
-        "like any client.",
+        "Running it on AWS",
+        "Here's how it's deployed. The model sits on a SageMaker endpoint. The app, the API "
+        "and the web UI, runs in two Docker containers on one small EC2 instance, which costs "
+        "about 70 cents a day. Only my IP address can reach it, and it needs an API key. The "
+        "instance's permissions are narrow: it can call this one model endpoint and read its "
+        "own data, nothing else. The GPU endpoint is the expensive part, so I delete it after "
+        "every session.",
     )
     boxes = [
-        ("Browser / curl", "your IP only\nX-API-Key"),
-        ("EC2 t3.small", "docker compose:\nStreamlit UI → FastAPI agent\nDuckDB over Parquet"),
-        ("SageMaker endpoint", "TGI 3.3.6\nQwen2.5-3B + merged LoRA\nml.g5.2xlarge or g6 fallback"),
+        ("Browser or curl", "my IP address only\nAPI key required"),
+        ("EC2 t3.small", "Docker: web UI → API\nDuckDB over Parquet files"),
+        ("SageMaker endpoint", "TGI model server\nQwen2.5-3B + LoRA\nGPU: g5 (or g6 fallback)"),
     ]
     bw = Inches(3.6)
     for i, (title, body) in enumerate(boxes):
@@ -708,21 +733,22 @@ def build() -> Path:
         W,
         Inches(2.6),
         [
-            "• One Dockerfile, two images: API (no Streamlit) and UI (no model code)",
-            "• Security group: UI and API ports from one address; IMDSv2; scoped instance role",
-            "• Cost: app ~$0.70/day; endpoint ~$1.5/hour, deleted after every session",
-            "• Runbooks with scripts for every step: docs/app-deployment.md, docs/deployment.md",
+            "• The web UI calls the same API you'd call with curl",
+            "• Locked down: one allowed IP, an API key, and minimal AWS permissions",
+            "• Cost: about $0.70 a day for the app; the GPU endpoint (~$1.50/hour) only runs "
+            "when needed",
+            "• Every step is scripted and written up as a runbook in the repo",
         ],
         size=18,
     )
 
-    # 11. Demo
+    # 12. Demo
     s = d.slide(
         "Live demo",
-        "Run the questions in order (script in docs/demo.md). For each, "
-        "show the answer tab, then the evidence tab: the plan, the SQL with its "
-        "parameters, the resolved cities, and the tool trace. Finish with curl against "
-        "the API.",
+        "Let's try it. I'll ask these in order, in one conversation. For each one I'll show "
+        "the answer, then the evidence tab: the plan the model wrote, the SQL that ran, which "
+        "city it matched, and a trace of every step. Then I'll call the API directly with "
+        "curl. If the network gives me trouble, I have a recording.",
     )
     text_box(
         s,
@@ -737,23 +763,22 @@ def build() -> Path:
             "4. How did home values change in Oakwood, OH since 2020?",
             "5. What will Denver rent be next year?",
             "6. What is ZORI and how is it smoothed?",
-            "7. curl the API: POST /v1/ask",
+            "7. The same question through the API, with curl",
         ],
         size=19,
     )
     image_or_placeholder(s, IMG / "ui_rank.png", Inches(7.2), Inches(1.4), width=Inches(5.6))
 
-    # 12. One fixed, one not
+    # 13. One fixed, one not
     s = d.slide(
-        "One failure fine-tuning fixed, one it didn't",
-        "Fixed: the first LoRA round "
-        "had no search_knowledge examples, so methodology questions collapsed from 73% "
-        "to 27%. Data v2 added them: it chose the search tool every time (100%). Note: the "
-        "eval scored only that choice; the answers themselves aren't scored yet. "
-        "Not fixed: 'What about rent?' right after a "
-        "state ranking. All 50 metric-switch follow-ups in the training data follow a "
-        "single-city question, so the model declines. The eval set has the same blind "
-        "spot; it was found in the live demo.",
+        "One problem fine-tuning fixed, and one it didn't",
+        "First, a fix. My first round of training data had no examples of searching the "
+        "methodology notes, so the model stopped searching altogether: it dropped from 73% to "
+        "27%. Adding 180 examples brought it to 100%. Now one it didn't fix. If you rank "
+        "Colorado cities by home value and then just say 'What about rent?', the model says "
+        "it can't do that. The cause is the same kind of gap: in training, switching to rent "
+        "only ever came after a single-city question. My test set had the same blind spot; "
+        "I only found it in the live demo.",
     )
     meth = [
         rate(summary(RUNS[k]), "turn_success", "methodology")
@@ -765,11 +790,11 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.9),
         Inches(4.8),
-        "Fixed: methodology questions",
-        f"chose search_knowledge: base {meth[0]:.0f}% → LoRA data v1 {meth[1]:.0f}% → "
-        f"data v2 {meth[2]:.0f}%\n\n"
-        "Data v1 had no search_knowledge examples, so the model learned never to use the "
-        "tool.\n\nData v2 added 180 of them. (Answers not yet scored.)",
+        "Fixed: questions about methodology",
+        f"Chose to search the notes: {meth[0]:.0f}% before → {meth[1]:.0f}% after round 1 → "
+        f"{meth[2]:.0f}% after round 2\n\n"
+        "Round 1 had no search examples, so the model learned to never search.\n\n"
+        "Round 2 added 180 of them. (The answers themselves aren't scored yet.)",
     )
     card(
         s,
@@ -777,15 +802,20 @@ def build() -> Path:
         Inches(1.5),
         Inches(5.9),
         Inches(4.8),
-        "Not fixed: metric switch after a ranking",
-        '"Rank Colorado cities by ZHVI growth in 2025" → "What about rent?"\n→ unsupported\n\n'
-        "All 50 metric-switch follow-ups in training follow a single-city question; the eval "
-        "set has the same gap.\n\nFound in the live demo; explicit phrasing works.",
+        "Not fixed: switching to rent after a ranking",
+        '"Rank Colorado cities by ZHVI growth in 2025" → "What about rent?"\n'
+        "→ the model says it can't\n\n"
+        "In training, switching to rent only ever followed a single-city question. My test "
+        "set had the same gap.\n\n"
+        'I found it in the live demo. Spelling it out works: "What about rent growth for '
+        'the same cities and year?"',
     )
 
-    # 13. Lessons
+    # 14. Lessons
     s = d.slide(
-        "Lessons learned", "Pick two or three of these to talk about; the rest are in the docs."
+        "What I learned",
+        "I'll pick two or three of these. The one I'd stress: every round of training "
+        "exposed a gap in the data, and fixing the data helped far more than training longer.",
     )
     text_box(
         s,
@@ -794,26 +824,28 @@ def build() -> Path:
         W,
         Inches(5.6),
         [
-            "• Constrained decoding needs a small grammar: the full schema hung TGI; a "
-            "structure-only copy plus Pydantic afterwards works",
-            "• The validator is also the best data filter: synthetic examples are kept only if "
-            "they run correctly on the real data",
-            "• Eval gold data has bugs too: four gold plans contradicted the city/state policy "
-            "(fixed in v1.1, v1 kept frozen)",
-            '• Each training round exposed a data gap (no search examples, "City, ST"-only '
-            "follow-ups); coverage beats more epochs",
-            "• Deterministic data needs a total sort order: DuckDB row order differed between "
-            "laptop and Studio",
-            "• Deploying found what tests didn't: a missing Docker plugin, a role without "
-            "Session Manager rights",
+            "• Keep the grammar small. My full JSON schema made the model server hang; a "
+            "slimmer version plus a check afterwards works fine",
+            "• Your own app is the best data filter: keep a generated example only if it runs "
+            "correctly on the real data",
+            "• Test sets have bugs too. Four expected answers in mine contradicted my own "
+            "rules, so I published a corrected version and kept the original frozen",
+            "• Each training round exposed a data gap. A second epoch didn't help; better "
+            "coverage did",
+            "• Make generated data reproducible. Row order differed between my laptop and "
+            "SageMaker until I sorted everything explicitly",
+            "• Deploying finds what tests don't: a missing Docker plugin, and a permission I "
+            "forgot",
         ],
         size=19,
     )
 
-    # 14. Future work
+    # 15. Future work
     s = d.slide(
-        "Future work",
-        "Close with the limits honestly, then the next steps. Point to the repo and the docs.",
+        "What's next",
+        "To wrap up: here's what I'd do next, starting with the two gaps I just showed you. "
+        "Everything is in the repo: the code, the docs, and every test result. Thanks! "
+        "Happy to take questions.",
     )
     text_box(
         s,
@@ -822,12 +854,11 @@ def build() -> Path:
         Inches(7),
         Inches(5.4),
         [
-            "• Training data for metric switches after rankings and for replies to "
-            "clarifications (both untested now)",
-            "• Metro and ZIP-level series; more operations (correlation, comparisons to a "
-            "baseline)",
-            "• HTTPS and per-user auth for a public deployment",
-            "• Hybrid retrieval if the methodology corpus grows",
+            "• Teach the two things it can't do yet: switching to rent after a ranking, and "
+            "following up after it asks which city",
+            "• Score the methodology answers, not just the choice to search",
+            "• Add metro and ZIP-code data, and more calculations",
+            "• HTTPS and real user accounts, if it were ever public",
         ],
         size=20,
     )
@@ -837,8 +868,8 @@ def build() -> Path:
         Inches(1.6),
         Inches(4.5),
         Inches(3.4),
-        "Docs",
-        "README · architecture · model\nsampling · evaluation · API\ndeployment runbooks\n\n"
+        "Read more",
+        "README · how it works · the model\nsampling · test results · API\nAWS runbooks\n\n"
         "github.com/weimiao67/llm-class-final",
     )
 
