@@ -34,6 +34,12 @@ def safe_name(text: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "-", text).strip("-") or "model"
 
 
+def pct(metric: dict) -> str:
+    """A metric's rate for the console; "n/a" when no case was scored on it (e.g. execution
+    accuracy on a methodology-only run), never a misleading 0.0%."""
+    return "n/a" if metric["rate"] is None else f"{metric['rate']:.1%}"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--model", choices=["oracle", "stub", "sagemaker"], required=True)
@@ -102,8 +108,8 @@ def main() -> int:
     )
     o = report["overall"]
     print(
-        f"\nTurn success {o['turn_success']['rate']:.1%} · execution accuracy "
-        f"{(o['execution_accuracy']['rate'] or 0):.1%} · report: {args.out_dir / run_id}"
+        f"\nTurn success {pct(o['turn_success'])} · execution accuracy "
+        f"{pct(o['execution_accuracy'])} · report: {args.out_dir / run_id}"
     )
     failed_oracle = args.model == "oracle" and o["turn_success"]["rate"] != 1.0
     return 1 if failed_oracle else 0

@@ -8,9 +8,10 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 
 > **Methodology cases measure tool choice.** Every run below was made before the knowledge base
 > existed (Step 4a), so the 15 methodology cases were scored on choosing `search_knowledge`, not
-> on the answer. "Methodology 100%" means the model chose the right tool every time; its full
-> answers from the knowledge base haven't been scored yet. See
-> [Methodology answers](#methodology-answers-not-yet-scored) at the end.
+> on the answer. "Methodology 100%" means the model chose the right tool every time. The answers
+> were scored later, with the knowledge base and a manual review: 10 of 15 fully correct. See
+> [Methodology answers with the knowledge base](#methodology-answers-with-the-knowledge-base) at
+> the end.
 
 | Run | Model | Prompt | Decoding | Turn success | Execution accuracy | Report |
 |---|---|---|---|---:|---:|---|
@@ -21,6 +22,7 @@ All runs use the frozen 200-case set `evaluation/cases/v1.jsonl` (see
 | v2-lora, no constraint | Qwen2.5-3B + LoRA | planner-v2 | greedy, **no** schema | 84.0% | 84.0% | [`20261123-171407-…`](../evaluation/reports/20261123-171407-qwen2.5-3b-lora-93a8b1a171-unconstrained/report.md) |
 | v3-lora | **Qwen2.5-3B + LoRA** (data v2 `f261a5f4d7`, 1 epoch) | planner-v2 | same as v1 | **92.5%** | **89.3%** | [`20261123-191702-…`](../evaluation/reports/20261123-191702-qwen2.5-3b-lora-f261a5f4d7/report.md) |
 | v3-lora, no constraint | Qwen2.5-3B + LoRA (data v2) | planner-v2 | greedy, **no** schema | 92.5% | 90.1% | [`20261123-192137-…`](../evaluation/reports/20261123-192137-qwen2.5-3b-lora-f261a5f4d7-unconstrained/report.md) |
+| v3-lora + knowledge base | Qwen2.5-3B + LoRA (data v2), **methodology cases only** (15) | planner-v2 | same as v1 | 100.0% (manual review: 10/15 fully correct) | n/a | [`20261124-224431-…`](../evaluation/reports/20261124-224431-qwen2.5-3b-lora-f261a5f4d7-knowledge/report.md) |
 
 ## Model selection
 
@@ -338,20 +340,47 @@ follow-up score doesn't measure this case.
 The demo uses the explicit phrasing. Fixing the model would need metric-switch follow-ups after
 rankings and aggregates in the training data, with new eval cases for them (v1 stays frozen).
 
-## Methodology answers: not yet scored
+## Methodology answers with the knowledge base
 
 The runs above score methodology cases only on choosing `search_knowledge` (see the note at the
-top). The answer path itself has this evidence so far:
+top). This run scores the answers: the data-v2 model on the 15 methodology cases with the
+knowledge base loaded (`--family methodology --knowledge`), report
+[`20261124-224431-…`](../evaluation/reports/20261124-224431-qwen2.5-3b-lora-f261a5f4d7-knowledge/report.md).
 
-- The **oracle** run with the knowledge base (`--knowledge`) answers all 15 methodology cases
-  with sources. It uses the gold calls, so it tests retrieval and the answer path, not the model.
-- **Retrieval for the model's own queries:** running the 15 queries the data-v2 model produced
-  through the BM25 index, 14 retrieve a relevant section in the top 3 (nearly always first). The
-  miss is a bad query, not bad retrieval: for "Does ZORI include single-family homes?" the model
-  searched `ZORI sale price vs rent`, so "Housing types in ZORI" isn't retrieved.
-- **Live demo:** "What is ZORI and how is it smoothed?" was answered correctly, with sources, by
-  the data-v2 model on the deployed app.
+**Automated scoring: 15/15.** Every turn chose `search_knowledge` and ended in an answer with
+sources, and all 15 answers were the model's own writing and passed the number check: no
+greedy retries, no template fallbacks. Each turn took exactly two model calls (plan, answer);
+latency p50 / p95 was 0.9 / 1.2 s.
 
-To score the full answers, run the eval with `--knowledge` against the endpoint
-(`scripts/run_eval.py --model sagemaker --endpoint final-wm-qwen-lora --knowledge ...`).
+**Manual review: 10 fully correct, 3 partly right, 2 wrong.** The automated score checks that
+an answer exists, cites sources, and has grounded numbers; it doesn't judge whether the answer is
+right. So each answer was compared by hand with the source documents in `rag/corpus/`:
 
+| Case | Question | Verdict | Note |
+|---|---|---|---|
+| 001 | What is ZORI? | partly right | Correct description, but "covers April 2015": the data starts January 2015 (April 2020 is when Zillow introduced ZORI) |
+| 002 | How is ZHVI calculated? | correct | Trimmed mean of the middle third of Zestimates, repeat-Zestimate chaining, the 2023 neural update |
+| 003 | What does smoothed and seasonally adjusted mean? | correct | |
+| 004 | Difference between ZHVI and ZORI? | partly right | Differences are right, but "there's no direct comparison": the source says to compare percentage changes |
+| 005 | Is ZHVI the same as a sale price? | correct | |
+| 006 | What does the 33rd to 67th percentile tier mean? | **wrong** | "33% of homes are below this level and 67% above it"; the tier is the middle third. The right section was retrieved; the error is in the writing |
+| 007 | How does Zillow measure rent? | correct | |
+| 008 | Why are some months missing? | correct | |
+| 009 | Does ZORI include single-family homes? | **wrong** | "No": the series covers single-family, condo and co-op, and apartment rentals. The model's query (`ZORI sale price vs rent`) didn't retrieve "Housing types in ZORI" |
+| 010 | What is a home value index? | correct | |
+| 011 | Is ZORI the same as asking rent? | partly right | Defensible but imprecise: ZORI is built from asking rents (not rents paid), adjusted for the mix of units |
+| 012 | How often is ZHVI updated? | correct | Monthly, with revisions; coverage figures right |
+| 013 | Methodology behind ZORI? | correct | Repeat-rent regression, three-month average, geographies |
+| 014 | Can I use ZHVI as an appraisal? | correct | |
+| 015 | What geography does the city data use? | correct | |
+
+**What this shows.** The number check catches invented numbers, but none of these errors is a
+number: the years come from the sources (2015) and the percentiles from the question (33, 67).
+Grounding the numbers doesn't make an answer correct. The two wrong answers have different
+causes: a bad search query (009, so the right passage was never seen) and a misreading of the
+right passage (006). The review is one person's judgment, done once; a larger or blind review
+would be needed to put a confidence interval on it.
+
+**Earlier evidence for the answer path:** the oracle run with the knowledge base answers all 15
+cases with sources (it uses the gold calls, so it tests retrieval and the answer path without the
+model); and the live demo's "What is ZORI and how is it smoothed?" was answered correctly.

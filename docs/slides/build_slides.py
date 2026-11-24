@@ -677,8 +677,9 @@ def build() -> Path:
         "The biggest jumps are exactly where the base model kept failing: statewide questions, "
         "and knowing when and how to decline. Single-city questions went from 83% to 100%. "
         "One category slipped a little, highest-and-lowest-month questions, from 18 to 17 out "
-        "of 20. And a note on methodology: the 100% there means it chose to search my notes; "
-        "the answers themselves haven't been scored yet.",
+        "of 20. And a note on methodology: the 100% there means it chose to search my notes. "
+        "When I scored the answers too, 10 of 15 were fully right; two were wrong in ways the "
+        "number check can't catch.",
     )
     s.shapes.add_picture(str(IMG / "chart_families.png"), L, Inches(1.4), width=Inches(7.6))
     text_box(
@@ -700,7 +701,7 @@ def build() -> Path:
                 )
             ),
             "One small drop: highest/lowest month, 90% → 85%.",
-            "Methodology = chose to search the notes; answers not scored yet.",
+            "Methodology answers, checked by hand: 10 of 15 fully right.",
         ],
         size=17,
     )
@@ -774,7 +775,9 @@ def build() -> Path:
         "One problem fine-tuning fixed, and one it didn't",
         "First, a fix. My first round of training data had no examples of searching the "
         "methodology notes, so the model stopped searching altogether: it dropped from 73% to "
-        "27%. Adding 180 examples brought it to 100%. Now one it didn't fix. If you rank "
+        "27%. Adding 180 examples brought it to 100%. I also checked the answers by hand: 10 "
+        "of 15 were fully right, and two were wrong, one because of a bad search. Now one it "
+        "didn't fix. If you rank "
         "Colorado cities by home value and then just say 'What about rent?', the model says "
         "it can't do that. The cause is the same kind of gap: in training, switching to rent "
         "only ever came after a single-city question. My test set had the same blind spot; "
@@ -794,7 +797,8 @@ def build() -> Path:
         f"Chose to search the notes: {meth[0]:.0f}% before → {meth[1]:.0f}% after round 1 → "
         f"{meth[2]:.0f}% after round 2\n\n"
         "Round 1 had no search examples, so the model learned to never search.\n\n"
-        "Round 2 added 180 of them. (The answers themselves aren't scored yet.)",
+        "Round 2 added 180 of them. With the notes loaded, all 15 answers came back, "
+        "and 10 were fully right when I checked them by hand.",
     )
     card(
         s,
@@ -856,7 +860,7 @@ def build() -> Path:
         [
             "• Teach the two things it can't do yet: switching to rent after a ranking, and "
             "following up after it asks which city",
-            "• Score the methodology answers, not just the choice to search",
+            "• Better methodology answers: 2 of 15 were wrong (one bad search, one misread)",
             "• Add metro and ZIP-code data, and more calculations",
             "• HTTPS and real user accounts, if it were ever public",
         ],
