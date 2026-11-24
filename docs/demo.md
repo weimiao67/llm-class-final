@@ -23,13 +23,19 @@ The endpoint costs about $1.5/hour, so start it only for the rehearsal and the d
 2. **Check your IP is allowed:** `curl -s https://checkip.amazonaws.com` on the presenting laptop.
    If it differs from the security group's two rules (TCP 8501 and 8000), edit them. A venue's
    network usually has a different address from home.
-3. **Deploy the model** in Studio (about 10 minutes):
+3. **Deploy the model** in Studio (about 10 minutes). The model is the data-v2 training job's
+   output; `scripts/launch_train.py` printed its path, and it is also under
+   `s3://sagemaker-us-east-2-<account>/final-wm-qwen-lora-data-v2/` (job
+   `final-wm-qwen-lora-data-v2-2026-11-23-17-46-11-441`):
 
    ```bash
    python scripts/deploy_endpoint.py --name final-wm-qwen-lora \
-     --model-data s3://sagemaker-us-east-2-175921209830/final-wm-qwen-lora-data-v2/final-wm-qwen-lora-data-v2-2026-11-23-17-46-11-441/output/model.tar.gz \
+     --model-data s3://sagemaker-us-east-2-<account>/final-wm-qwen-lora-data-v2/final-wm-qwen-lora-data-v2-2026-11-23-17-46-11-441/output/model.tar.gz \
      --fallback-instance-types ml.g6.2xlarge ml.g6e.xlarge
    ```
+
+   Note which instance type it gets (SageMaker console → the endpoint → its configuration), in
+   case someone asks: `ml.g5.2xlarge`, or a g6 / g6e fallback when g5 capacity is short.
 
 4. **Check readiness** from the laptop: `curl -s http://<dns>:8000/ready` must say
    `"status":"ready"`. The UI's sidebar status turns green.

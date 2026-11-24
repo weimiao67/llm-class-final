@@ -589,14 +589,15 @@ def build() -> Path:
         "Deployment on AWS",
         "The model runs on a SageMaker real-time endpoint with "
         "TGI. The app (FastAPI agent + Streamlit UI) runs as two containers on one EC2 "
-        "t3.small, about 2 cents an hour. The instance role may only call this one "
-        "endpoint, read the data prefix, and read the API key. The UI talks to the API "
+        "t3.small, about 70 cents a day with its address and disk. The instance role may "
+        "only call this one endpoint, read the data prefix, and read the API key. The UI "
+        "talks to the API "
         "like any client.",
     )
     boxes = [
         ("Browser / curl", "your IP only\nX-API-Key"),
         ("EC2 t3.small", "docker compose:\nStreamlit UI → FastAPI agent\nDuckDB over Parquet"),
-        ("SageMaker endpoint", "TGI 3.3.6\nQwen2.5-3B + merged LoRA\nml.g5.2xlarge"),
+        ("SageMaker endpoint", "TGI 3.3.6\nQwen2.5-3B + merged LoRA\nml.g5.2xlarge or g6 fallback"),
     ]
     bw = Inches(3.6)
     for i, (title, body) in enumerate(boxes):
@@ -613,7 +614,7 @@ def build() -> Path:
         [
             "• One Dockerfile, two images: API (no Streamlit) and UI (no model code)",
             "• Security group: UI and API ports from one address; IMDSv2; scoped instance role",
-            "• Cost: app ~$0.50/day; endpoint ~$1.5/hour, deleted after every session",
+            "• Cost: app ~$0.70/day; endpoint ~$1.5/hour, deleted after every session",
             "• Runbooks with scripts for every step: docs/app-deployment.md, docs/deployment.md",
         ],
         size=18,
