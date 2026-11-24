@@ -1,12 +1,52 @@
 # Housing Market AI Analyst
 
-A small language model plans analyses of Zillow city-level home values (ZHVI) and rents (ZORI);
-trusted code validates each plan, compiles it to parameterized DuckDB SQL, and computes the
-results deterministically. The model never writes SQL and never supplies the numbers.
+Ask questions about U.S. city home values (Zillow ZHVI) and rents (ZORI) in plain English: "Rank
+Colorado cities by home value growth in 2025", "When did Mead, CO's home values peak?", "What is
+ZORI and how is it smoothed?". A **fine-tuned 3B model plans** each analysis as a typed plan;
+**trusted code** validates it against the data, compiles it to parameterized SQL, and computes
+every number. The model never writes SQL and never supplies a number the data doesn't contain.
 
-> Status: Step 4 (product). The LoRA-tuned Qwen2.5-3B planner reaches 89.3% execution accuracy on
-> the 200-case eval set (base model: 51.1%), see [docs/evaluation.md](docs/evaluation.md). Done so
-> far: the methodology knowledge base (4a) and the Streamlit UI (4b), and app deployment on EC2 (4c).
+```mermaid
+flowchart LR
+    Q([Question]) --> P[Planner<br/>Qwen2.5-3B + LoRA<br/>greedy, JSON-schema constrained]
+    P -->|AnalysisPlan| V[Validator<br/>cities, months, fields]
+    V -->|ambiguous city| CL([Clarifying question])
+    V --> SQL[Plan → parameterized SQL<br/>DuckDB over Parquet]
+    SQL --> W[Answer writer<br/>T=0.3 nucleus sampling]
+    W --> G{Every number<br/>in the result?}
+    G -->|yes| A([Answer + data + SQL + trace])
+    G -->|no| T[Greedy retry,<br/>then template] --> A
+    P -->|search_knowledge| KB[BM25 over methodology docs] --> W
+```
+
+## Results
+
+On the frozen 200-case eval set ([docs/evaluation.md](docs/evaluation.md)):
+
+| Model | Execution accuracy | Turn success | Valid first output |
+|---|---:|---:|---:|
+| Llama-3.2-3B-Instruct (base) | 27.5% | 37.5% | 79.0% |
+| Qwen2.5-3B-Instruct (base) | 51.1% | 55.5% | 94.0% |
+| **Qwen2.5-3B + LoRA** (data v2) | **89.3%** | **92.5%** | **100.0%** |
+
+Execution accuracy runs the predicted and gold plans and compares the results (131 data cases);
+turn success also scores clarifications, refusals, and methodology answers. On eval v1.1, which
+corrects four gold plans, the fine-tuned model scores 92.1% and 94.5%.
+
+The app runs on AWS: the API and the Streamlit UI on one EC2 instance, calling the model on a
+SageMaker endpoint.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [docs/architecture.md](docs/architecture.md) | Components, one turn step by step, trust boundary, design decisions and trade-offs |
+| [docs/model.md](docs/model.md) | Base model choice, validator-filtered training data, LoRA configuration, training results |
+| [docs/sampling.md](docs/sampling.md) | Decoding per step, how constrained decoding works, the grounding check, measured effects |
+| [docs/evaluation.md](docs/evaluation.md) | Eval set, metrics, every run, per-family results, error analysis |
+| [docs/api.md](docs/api.md) | Endpoints, request and response fields, examples, status codes |
+| [docs/app-deployment.md](docs/app-deployment.md) | Runbook: the app on EC2 (what's created, cost, security, troubleshooting) |
+| [docs/deployment.md](docs/deployment.md), [docs/training.md](docs/training.md) | Runbooks: the SageMaker endpoint and evaluation; the LoRA training job |
 
 ## Quick start (no AWS needed)
 
@@ -92,7 +132,6 @@ instance calling the SageMaker endpoint), see [docs/app-deployment.md](docs/app-
 | `scripts/deploy_app.py` | Deploy / check / stop / tear down the app on EC2 — see [docs/app-deployment.md](docs/app-deployment.md) |
 | `scripts/deploy_endpoint.py` | Deploy / check / delete the SageMaker TGI endpoint — see [docs/deployment.md](docs/deployment.md) |
 | `scripts/smoke_endpoint.py` | Check a live endpoint against the decoding settings the agent relies on |
-| `docs/evaluation.md` | Evaluation results so far (baseline v0, the next runs) |
 | `training/` | Step 3 planner training data: phrase grammar, filters, train/dev split — see [training/README.md](training/README.md) |
 | `scripts/build_training_data.py` | Build the training data and its report |
 | `training/job/train.py` | SageMaker training job: LoRA on Qwen2.5-3B, completion-only loss, in-job merge |
