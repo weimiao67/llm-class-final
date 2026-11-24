@@ -311,7 +311,10 @@ def test_check_labels_an_instance_type_denial_as_ec2_not_ssm(capsys):
     app.cmd_check(clients, check_args())
     out = capsys.readouterr().out
     assert "NO   EC2 describe the instance type: UnauthorizedOperation" in out
-    assert "OK   SSM read the AMI id: ok" in out  # falls back to x86_64 for the lookup
+    assert "OK   SSM read the AMI id: ok" in out  # the SSM permission is still tested
+    # ... but the launch isn't dry-run with a guessed (maybe wrong-architecture) image.
+    clients["ec2"].run_instances.assert_not_called()
+    assert "architecture is unknown" in out
 
 
 def test_check_skips_the_launch_dry_run_without_an_image_id(capsys):
@@ -321,4 +324,14 @@ def test_check_skips_the_launch_dry_run_without_an_image_id(capsys):
     clients["ec2"].run_instances.assert_not_called()
     out = capsys.readouterr().out
     assert "NO   SSM read the AMI id: AccessDeniedException" in out
-    assert "??   EC2 launch an instance with the app role (dry run): not checked" in out
+    assert (
+        "??   EC2 launch an instance with the app role (dry run): not checked: no image id" in out
+    )
+
+
+def test_runbook_uses_the_ui_wording_for_a_deleted_endpoint():
+    from ui.view import ENDPOINT_ERRORS
+
+    doc = (ROOT / "docs" / "app-deployment.md").read_text()
+    assert f"Model endpoint {ENDPOINT_ERRORS['ValidationException']}" in doc
+    assert "Model endpoint unreachable" not in doc

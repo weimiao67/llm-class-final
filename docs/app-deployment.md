@@ -25,7 +25,7 @@ SageMaker Studio terminal, like the other runbooks; `scripts/deploy_app.py` uses
 **Cost:** `t3.small` is about $0.02/hour while running (about $0.50/day); stopped, only its disk
 costs a few cents a day. The endpoint is billed separately (about $1.5/hour), so the usual rule
 still applies: **delete the endpoint after each session**. The app keeps running and shows
-"Model endpoint unreachable" until the endpoint is back.
+"Model endpoint not deployed" until the endpoint is back.
 
 **Security:** the UI and the API are plain HTTP, reachable only from the address you allow. The
 API requires the API key; the UI holds it server-side, so anyone who can reach port 8501 can use

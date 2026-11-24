@@ -404,13 +404,18 @@ def cmd_check(c, args) -> int:
             code = error_code(exc)
             results.append((label, "OK" if code in ok_codes else "NO", code))
 
-    found: dict[str, str] = {"arch": "x86_64"}
+    found: dict[str, str] = {}
 
     def describe_type():
         found["arch"] = instance_arch(c["ec2"], args.instance_type)
 
     def read_ami():
-        found["ami"] = c["ssm"].get_parameter(Name=ami_param(found["arch"]))["Parameter"]["Value"]
+        # The read itself tests the SSM permission, so it runs even when the architecture is
+        # unknown; but only an image of the right architecture is used for the launch dry run
+        # (an x86 image on a t4g type would fail for the wrong reason).
+        image = c["ssm"].get_parameter(Name=ami_param(found.get("arch", "x86_64")))
+        if "arch" in found:
+            found["ami"] = image["Parameter"]["Value"]
 
     profile = args.instance_profile or (NAME if _profile_exists(c["iam"]) else None)
 
@@ -457,8 +462,9 @@ def cmd_check(c, args) -> int:
                 **launch,
             ),
         )
-    else:  # without an image id the dry run would fail for that reason, not for permissions
-        results.append((label, "??", "not checked: no image id (see the AMI line)"))
+    else:  # without a matching image the dry run would fail for that reason, not permissions
+        why = "no image id" if "arch" in found else "the instance type's architecture is unknown"
+        results.append((label, "??", f"not checked: {why} (see the lines above)"))
     probe(
         "SageMaker describe the endpoint",
         lambda: c["sagemaker"].describe_endpoint(EndpointName=args.endpoint),
