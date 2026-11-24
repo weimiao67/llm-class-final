@@ -47,6 +47,61 @@ flowchart LR
 
 ## One turn
 
+What happens between typing a question and seeing the answer. Model calls go to the SageMaker
+endpoint; everything else runs in the app.
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Streamlit UI
+    participant API as Agent API
+    participant Model as Planner / writer<br/>(SageMaker, LoRA)
+    participant Tools as Validator + SQL<br/>(DuckDB)
+    participant KB as Knowledge base<br/>(BM25)
+
+    User->>UI: types a question (or clicks an example)
+    UI->>API: POST /v1/ask: question, history, state, X-API-Key
+    API->>Model: plan: greedy, JSON-schema constrained
+    Model-->>API: one tool call
+
+    alt analyze (a data question)
+        API->>Tools: validate the plan against the data
+        loop while the plan is invalid (at most 2 retries)
+            Tools-->>API: invalid_plan + message
+            API->>Model: retry with the validator's message
+            Model-->>API: corrected tool call
+            API->>Tools: validate again
+        end
+        alt ambiguous or unknown city
+            Tools-->>API: ambiguous_city (lists the matches)
+            API-->>UI: kind: clarify ("Which Oakwood?")
+        else valid
+            Tools->>Tools: compile to parameterized SQL, run, compute
+            Tools-->>API: rows, summary, SQL + params, warnings
+            API->>Model: write 1–2 sentences (T=0.3, top-p 0.9)
+            Model-->>API: answer
+            API->>API: number check: every number in the result?
+            opt check fails
+                API->>Model: regenerate greedily
+                Model-->>API: answer (checked again)
+                Note over API,Model: still failing: the app writes<br/>a template answer from the result
+            end
+            API-->>UI: kind: answer + artifact + plan + trace
+        end
+    else search_knowledge (a methodology question)
+        API->>KB: query, e.g. "ZORI smoothing"
+        KB-->>API: top 3 sections with source URLs
+        API->>Model: write the answer from the passages
+        Model-->>API: answer (same number check)
+        API-->>UI: kind: answer + sources
+    else respond (forecast, advice, SQL, out of scope)
+        API-->>UI: kind: out_of_scope / unsupported, with an alternative
+    end
+
+    UI-->>User: AI response · Queried data · Evidence & trace tabs
+    Note over UI,API: The UI keeps the history and updated_state<br/>and sends them with the next question (follow-ups)
+```
+
 1. **Plan.** The API passes the question, up to six earlier messages, and the conversation state
    (the last plan's metric, cities, state, and period) to the agent. The planner prompt includes
    the data catalog. The model emits one tool call under greedy, schema-constrained decoding
