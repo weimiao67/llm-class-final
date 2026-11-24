@@ -47,6 +47,7 @@ SageMaker endpoint.
 | [docs/api.md](docs/api.md) | Endpoints, request and response fields, examples, status codes |
 | [docs/app-deployment.md](docs/app-deployment.md) | Runbook: the app on EC2 (what's created, cost, security, troubleshooting) |
 | [docs/deployment.md](docs/deployment.md), [docs/training.md](docs/training.md) | Runbooks: the SageMaker endpoint and evaluation; the LoRA training job |
+| [docs/demo.md](docs/demo.md) | Demo script: checklist, the six questions and what to point out, fallbacks; slides in [docs/slides/](docs/slides/) |
 
 ## Quick start (no AWS needed)
 
