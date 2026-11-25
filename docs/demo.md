@@ -1,10 +1,7 @@
 # Demo script
 
-An 8–10 minute presentation with a live demo on the deployed app. Slides:
-[slides/housing-analyst.pptx](slides/housing-analyst.pptx) (15 slides, speaker notes on each).
-To use them in Google Slides, upload the file to Google Drive and choose **Open with → Google
-Slides**. To rebuild the deck after changing the numbers or text:
-`uv run --with python-pptx --with matplotlib python docs/slides/build_slides.py`.
+An 8–10 minute presentation (15 slides in Google Slides, with speaker notes on each) and a live
+demo on the deployed app.
 
 | Part | Slides | Time |
 |---|---|---:|
